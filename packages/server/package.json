@@ -1,0 +1,51 @@
+{
+  "name": "server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "test": "vitest",
+    "db:migrate": "npx sequelize-cli db:migrate",
+    "db:migrate:undo": "npx sequelize-cli db:migrate:undo",
+    "db:seed": "npx sequelize-cli db:seed:all"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^9.0.0",
+    "bcrypt": "^6.0.0",
+    "dompurify": "^3.3.3",
+    "dotenv": "^17.3.1",
+    "fastify": "^5.8.4",
+    "fastify-plugin": "^5.1.0",
+    "ioredis": "^5.10.1",
+    "jsdom": "^29.0.2",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.20.0",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.8",
+    "umzug": "^3.8.2",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/dompurify": "^3.2.0",
+    "@types/jsdom": "^28.0.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.12.0",
+    "@types/supertest": "^7.2.0",
+    "sequelize-cli": "^6.6.5",
+    "supertest": "^7.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

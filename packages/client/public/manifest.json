@@ -1,0 +1,29 @@
+{
+  "name": "YUENVOICE — 屋苑通訊平台",
+  "short_name": "YuenVoice",
+  "description": "住戶溝通及管理平台",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#B45309",
+  "background_color": "#F5F5F0",
+  "categories": ["social", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

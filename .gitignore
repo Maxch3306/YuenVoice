@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Vite
+*.local
+packages/client/node_modules/.vite/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+
+# Uploads (user-generated content)
+uploads/
+!uploads/.gitkeep
+
+# TypeScript cache
+*.tsbuildinfo
+
+# pnpm store (if local)
+.pnpm-store/
+
+# Claude Code
+.claude/
+.agents/
+skills-lock.json
+
+# Pencil mockups (large binary)
+*.pen
