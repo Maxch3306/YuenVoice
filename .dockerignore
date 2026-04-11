@@ -17,6 +17,5 @@ uploads
 *.log
 docker-compose*.yml
 Dockerfile
-deploy
 design-system
 docs
