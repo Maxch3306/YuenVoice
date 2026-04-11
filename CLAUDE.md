@@ -54,6 +54,12 @@ pnpm --filter client typecheck        # TypeScript check without emit
 - **MUST** log audit entries for all state-changing operations by mgmt/admin roles (via `utils/audit.ts`)
 - **MUST** validate file uploads by magic bytes (via `plugins/upload.ts`)
 
+### Redis Key Type Changes
+
+- **MUST** guard against legacy key types when changing a Redis key's data structure (e.g., string → hash)
+- **MUST** check `redis.type(key)` before operating and migrate/delete old keys to avoid `WRONGTYPE` errors
+- **MUST NOT** assume Redis keys are a specific type — production may have old keys from prior code
+
 ### Client Code
 
 - **MUST** use HugeIcons (`@hugeicons/react`) — do not mix with Lucide or other icon libraries
