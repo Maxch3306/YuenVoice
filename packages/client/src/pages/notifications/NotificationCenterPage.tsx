@@ -80,8 +80,12 @@ export default function NotificationCenterPage() {
         return;
       }
 
-      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-      if (!vapidKey) {
+      // Fetch VAPID public key from server
+      let vapidKey: string;
+      try {
+        const res = await api.get<{ key: string }>('/api/push/vapid-key');
+        vapidKey = res.data.key;
+      } catch {
         setPushStatus('error');
         setPushError(t.notifications.vapidError);
         return;

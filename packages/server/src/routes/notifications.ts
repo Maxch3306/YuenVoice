@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import * as notificationService from '../services/notification.service.js'
 import * as pushService from '../services/push.service.js'
+import { config } from '../config/index.js'
 
 const CATEGORIES = ['urgent', 'general', 'event'] as const
 const TARGET_TYPES = ['all', 'block', 'floor'] as const
@@ -119,6 +120,20 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string }
       const updated = await notificationService.markAsRead(id, request.user.id)
       return updated
+    }
+  )
+
+  // GET /api/push/vapid-key — public VAPID key for push subscription
+  fastify.get(
+    '/api/push/vapid-key',
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (_request, reply) => {
+      if (!config.vapidPublicKey) {
+        return reply.status(503).send({ error: 'Push not configured' })
+      }
+      return { key: config.vapidPublicKey }
     }
   )
 
