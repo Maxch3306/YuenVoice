@@ -25,28 +25,38 @@ function maskAuthor(user: { name: string; id: string } | null, isAnonymous: bool
 // ── Service Functions ──
 
 /**
- * List boards accessible by the user: estate-wide boards + boards matching their flat's block.
+ * List boards accessible by the user.
+ * Admins and management staff see all boards.
+ * Residents and OC committee see estate-wide + their block/floor boards.
  */
-export async function listBoards(userFlatId: string | null) {
-  const conditions: any[] = [{ scope_type: 'estate' }]
+export async function listBoards(userFlatId: string | null, userRole: string) {
+  const seeAll = userRole === 'admin' || userRole === 'mgmt_staff'
 
-  if (userFlatId) {
-    const flat = await Flat.findByPk(userFlatId, { attributes: ['block', 'floor'] })
-    if (flat) {
-      conditions.push({
-        scope_type: 'block',
-        scope_block: flat.block,
-      })
-      conditions.push({
-        scope_type: 'floor',
-        scope_block: flat.block,
-        scope_floor: flat.floor,
-      })
+  let whereClause: any = {}
+
+  if (!seeAll) {
+    const conditions: any[] = [{ scope_type: 'estate' }]
+
+    if (userFlatId) {
+      const flat = await Flat.findByPk(userFlatId, { attributes: ['block', 'floor'] })
+      if (flat) {
+        conditions.push({
+          scope_type: 'block',
+          scope_block: flat.block,
+        })
+        conditions.push({
+          scope_type: 'floor',
+          scope_block: flat.block,
+          scope_floor: flat.floor,
+        })
+      }
     }
+
+    whereClause = { [Op.or]: conditions }
   }
 
   const boards = await DiscussionBoard.findAll({
-    where: { [Op.or]: conditions },
+    where: whereClause,
     order: [['created_at', 'ASC']],
     attributes: {
       include: [
