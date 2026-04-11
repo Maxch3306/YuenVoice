@@ -461,9 +461,9 @@ const zh = {
     backToMain: '返回主頁',
     menu: '選單',
   },
-} as const
+}
 
-const en: typeof zh = {
+const en: Translations = {
   common: {
     loading: 'Loading...',
     cancel: 'Cancel',
