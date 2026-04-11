@@ -42,6 +42,11 @@ const SESSION_TTL = 7 * 24 * 60 * 60 // 7 days
 async function storeRefreshToken(fastify: FastifyInstance, userId: string, sessionId: string, refreshToken: string): Promise<void> {
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
   const key = `session:refresh:${userId}`
+  // Clean up legacy string-type keys from before multi-session migration
+  const keyType = await fastify.redis.type(key)
+  if (keyType === 'string') {
+    await fastify.redis.del(key)
+  }
   await fastify.redis.hset(key, sessionId, tokenHash)
   await fastify.redis.expire(key, SESSION_TTL)
 }
@@ -165,6 +170,16 @@ export async function refresh(
   }
 
   const key = `session:refresh:${userId}`
+
+  // Handle legacy string-type keys from before multi-session migration
+  const keyType = await fastify.redis.type(key)
+  if (keyType === 'string') {
+    await fastify.redis.del(key)
+    const err = new Error('Session expired')
+    ;(err as any).statusCode = 401
+    throw err
+  }
+
   const storedHash = await fastify.redis.hget(key, sessionId)
   if (!storedHash) {
     const err = new Error('Session expired')
