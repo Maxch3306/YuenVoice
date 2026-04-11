@@ -9,8 +9,9 @@ import type {
 // ─── API Functions ──────────────────────────────────────────────
 
 export async function getBoards(): Promise<DiscussionBoard[]> {
-  const { data } = await api.get<DiscussionBoard[]>('/api/boards');
-  return data;
+  const res = await api.get('/api/boards');
+  const payload = res.data;
+  return Array.isArray(payload) ? payload : payload.data ?? [];
 }
 
 export async function getPosts(

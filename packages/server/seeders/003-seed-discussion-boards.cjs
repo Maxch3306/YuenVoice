@@ -16,7 +16,7 @@ module.exports = {
 
     const now = new Date()
 
-    await queryInterface.bulkInsert('discussion_boards', [
+    const boards = [
       {
         id: crypto.randomUUID(),
         name: 'Estate General / 屋苑綜合討論',
@@ -25,33 +25,22 @@ module.exports = {
         scope_floor: null,
         created_at: now,
       },
-      {
-        id: crypto.randomUUID(),
-        name: 'Block A / A座討論',
-        scope_type: 'block',
-        scope_block: 'A',
-        scope_floor: null,
-        created_at: now,
-      },
-      {
-        id: crypto.randomUUID(),
-        name: 'Block B / B座討論',
-        scope_type: 'block',
-        scope_block: 'B',
-        scope_floor: null,
-        created_at: now,
-      },
-      {
-        id: crypto.randomUUID(),
-        name: 'Block C / C座討論',
-        scope_type: 'block',
-        scope_block: 'C',
-        scope_floor: null,
-        created_at: now,
-      },
-    ])
+    ]
 
-    console.log('Seeded 4 discussion boards.')
+    for (let block = 1; block <= 6; block++) {
+      boards.push({
+        id: crypto.randomUUID(),
+        name: `Block ${block} / 第${block}座討論`,
+        scope_type: 'block',
+        scope_block: String(block),
+        scope_floor: null,
+        created_at: now,
+      })
+    }
+
+    await queryInterface.bulkInsert('discussion_boards', boards)
+
+    console.log(`Seeded ${boards.length} discussion boards.`)
   },
 
   async down(queryInterface) {

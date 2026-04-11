@@ -1,4 +1,11 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Load .env from project root (../../.. from src/config/)
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '..', '..', '.env') })
 
 export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
