@@ -13,6 +13,8 @@ RUN pnpm install --frozen-lockfile
 
 # ── Stage 2: Build client ──
 FROM deps AS client-build
+ARG VITE_VAPID_PUBLIC_KEY
+ENV VITE_VAPID_PUBLIC_KEY=${VITE_VAPID_PUBLIC_KEY}
 COPY packages/client/ packages/client/
 COPY tsconfig.base.json ./
 RUN pnpm --filter client build
