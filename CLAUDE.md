@@ -29,6 +29,13 @@ pnpm --filter client typecheck        # TypeScript check without emit
 
 ## MUST / MUST NOT Rules
 
+### Git
+
+- **MUST** use atomic commits — one logical change per commit (e.g., don't mix a bug fix with a refactor or docs update)
+- **MUST** write commit messages that explain *why*, not just *what*
+- **MUST** commit migration + model + route/service changes together when they form one feature
+- **MUST NOT** commit unrelated changes in the same commit
+
 ### Database
 
 - **MUST** create a new migration file for every schema change — never use `sequelize.sync()` or `alter: true`
