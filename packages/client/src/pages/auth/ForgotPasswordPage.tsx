@@ -18,12 +18,14 @@ import {
 } from '@/components/ui/card';
 
 import { forgotPassword } from '@/services/auth';
+import { useT } from '@/lib/i18n';
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export default function ForgotPasswordPage() {
+  const t = useT();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,11 +33,11 @@ export default function ForgotPasswordPage() {
 
   function validate(): boolean {
     if (!email.trim()) {
-      setEmailError('請輸入電郵地址');
+      setEmailError(t.forgot.errorRequired);
       return false;
     }
     if (!validateEmail(email)) {
-      setEmailError('電郵格式不正確');
+      setEmailError(t.forgot.errorFormat);
       return false;
     }
     setEmailError('');
@@ -66,19 +68,15 @@ export default function ForgotPasswordPage() {
             <div className="text-primary">
               <HugeiconsIcon icon={CheckmarkCircle02Icon} size={48} />
             </div>
-            <h2 className="text-xl font-bold">已發送</h2>
+            <h2 className="text-xl font-bold">{t.forgot.successTitle}</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              如果此電郵已註冊，你將收到重設密碼的連結
-              <br />
-              <span className="text-xs">
-                If registered, you will receive a reset link.
-              </span>
+              {t.forgot.successMessage}
             </p>
             <Link
               to="/login"
               className="text-primary mt-2 text-sm font-medium"
             >
-              &larr; 返回登入
+              &larr; {t.forgot.backToLogin}
             </Link>
           </div>
         </CardContent>
@@ -90,9 +88,9 @@ export default function ForgotPasswordPage() {
   return (
     <Card className="mx-auto w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-bold">忘記密碼</CardTitle>
+        <CardTitle className="text-2xl font-bold">{t.forgot.title}</CardTitle>
         <CardDescription className="leading-relaxed">
-          輸入你的電郵地址，我們將發送重設密碼連結
+          {t.forgot.subtitle}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -100,12 +98,12 @@ export default function ForgotPasswordPage() {
           {/* Email */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-sm font-medium">
-              電郵地址 (Email)
+              {t.forgot.email}
             </Label>
             <Input
               id="email"
               type="email"
-              placeholder="name@example.com"
+              placeholder={t.forgot.emailPlaceholder}
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
@@ -132,7 +130,7 @@ export default function ForgotPasswordPage() {
                 className="animate-spin"
               />
             ) : (
-              '發送重設連結'
+              t.forgot.submit
             )}
           </Button>
 
@@ -142,7 +140,7 @@ export default function ForgotPasswordPage() {
               to="/login"
               className="text-muted-foreground hover:text-primary text-sm"
             >
-              &larr; 返回登入
+              &larr; {t.forgot.backToLogin}
             </Link>
           </div>
         </form>

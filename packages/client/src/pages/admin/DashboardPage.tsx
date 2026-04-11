@@ -9,32 +9,34 @@ import {
 } from '@hugeicons/core-free-icons';
 
 import { getDashboardStats, getAuditLogs } from '@/services/admin';
+import { useT } from '@/lib/i18n';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 
-const statCards = [
-  { key: 'totalUsers' as const, label: '註冊用戶', icon: UserGroupIcon },
-  { key: 'openReports' as const, label: '待處理報告', icon: ClipboardIcon },
-  { key: 'postsThisWeek' as const, label: '本週帖文', icon: BubbleChatIcon },
-  { key: 'totalDocuments' as const, label: '法團文件', icon: File01Icon },
-];
-
-function relativeTime(dateStr: string): string {
-  const now = Date.now();
-  const diff = now - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return '剛剛';
-  if (minutes < 60) return `${minutes} 分鐘前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小時前`;
-  const days = Math.floor(hours / 24);
-  return `${days} 天前`;
-}
-
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const t = useT();
+
+  const statCards = [
+    { key: 'totalUsers' as const, label: t.adminDashboard.registeredUsers, icon: UserGroupIcon },
+    { key: 'openReports' as const, label: t.adminDashboard.pendingReports, icon: ClipboardIcon },
+    { key: 'postsThisWeek' as const, label: t.adminDashboard.weeklyPosts, icon: BubbleChatIcon },
+    { key: 'totalDocuments' as const, label: t.adminDashboard.ocDocuments, icon: File01Icon },
+  ];
+
+  function relativeTime(dateStr: string): string {
+    const now = Date.now();
+    const diff = now - new Date(dateStr).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return t.time.justNow;
+    if (minutes < 60) return t.time.minutesAgo(minutes);
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t.time.hoursAgo(hours);
+    const days = Math.floor(hours / 24);
+    return t.time.daysAgo(days);
+  }
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['admin', 'stats'],
@@ -48,7 +50,7 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 lg:p-6">
-      <h1 className="mb-6 text-2xl font-bold">管理儀表板</h1>
+      <h1 className="mb-6 text-2xl font-bold">{t.adminDashboard.title}</h1>
 
       {/* Stat Cards */}
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -84,20 +86,20 @@ export default function DashboardPage() {
       {/* Quick Links */}
       <div className="mb-8 flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => navigate('/admin/users')}>
-          用戶管理
+          {t.adminDashboard.userMgmt}
         </Button>
         <Button variant="outline" size="sm" onClick={() => navigate('/admin/flats')}>
-          單位管理
+          {t.adminDashboard.flatMgmt}
         </Button>
         <Button variant="outline" size="sm" onClick={() => navigate('/admin/audit-logs')}>
-          審計日誌
+          {t.adminDashboard.auditLog}
         </Button>
       </div>
 
       {/* Recent Activity */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">近期活動</CardTitle>
+          <CardTitle className="text-base">{t.adminDashboard.recentActivity}</CardTitle>
         </CardHeader>
         <CardContent>
           {logsLoading ? (
@@ -108,7 +110,7 @@ export default function DashboardPage() {
             </div>
           ) : !recentLogs?.data.length ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              暫無近期活動
+              {t.adminDashboard.noActivity}
             </p>
           ) : (
             <div className="divide-y">
@@ -116,7 +118,7 @@ export default function DashboardPage() {
                 <div key={log.id} className="py-3 first:pt-0 last:pb-0">
                   <p className="text-sm">
                     <span className="font-medium">
-                      {log.user?.name ?? '系統'}
+                      {log.user?.name ?? t.adminDashboard.system}
                     </span>
                     {' '}
                     {log.action}

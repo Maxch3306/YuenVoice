@@ -12,19 +12,26 @@ import { useNotificationStore } from '@/stores/notification-store';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useT } from '@/lib/i18n';
 import UserMenu from '@/components/UserMenu';
 
-const adminNavItems = [
-  { to: '/admin', label: '儀表板', icon: DashboardSquare01Icon, end: true },
-  { to: '/admin/users', label: '用戶管理', icon: UserGroupIcon, end: false },
-  { to: '/admin/flats', label: '單位管理', icon: Building01Icon, end: false },
-  { to: '/admin/audit-logs', label: '審計日誌', icon: Audit01Icon, end: false },
-] as const;
+const adminNavIcons = [
+  { to: '/admin', icon: DashboardSquare01Icon, key: 'dashboard' as const, end: true },
+  { to: '/admin/users', icon: UserGroupIcon, key: 'userMgmt' as const, end: false },
+  { to: '/admin/flats', icon: Building01Icon, key: 'flatMgmt' as const, end: false },
+  { to: '/admin/audit-logs', icon: Audit01Icon, key: 'auditLog' as const, end: false },
+];
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const t = useT();
+
+  const adminNavItems = adminNavIcons.map((item) => ({
+    ...item,
+    label: t.nav[item.key],
+  }));
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -36,7 +43,7 @@ export default function AdminLayout() {
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground md:hidden"
-            aria-label="選單"
+            aria-label={t.nav.menu}
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <line x1="3" y1="5" x2="17" y2="5" />
@@ -48,7 +55,7 @@ export default function AdminLayout() {
           <NavLink to="/" className="font-mono text-lg font-bold tracking-tight text-primary">
             YUENVOICE
           </NavLink>
-          <span className="hidden text-sm text-muted-foreground sm:inline">(Admin)</span>
+          <span className="hidden text-sm text-muted-foreground sm:inline">({t.nav.admin})</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -56,7 +63,7 @@ export default function AdminLayout() {
             type="button"
             onClick={() => navigate('/notifications')}
             className="relative inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
-            aria-label="通知"
+            aria-label={t.nav.notifications}
           >
             <HugeiconsIcon icon={Notification01Icon} size={24} />
             {unreadCount > 0 && (
@@ -106,7 +113,7 @@ export default function AdminLayout() {
               className="mt-4 flex h-11 cursor-pointer items-center gap-3 rounded-md border-t border-border px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
             >
               <HugeiconsIcon icon={ArrowLeft01Icon} size={20} />
-              <span>返回主頁</span>
+              <span>{t.nav.backToMain}</span>
             </NavLink>
           </nav>
         </aside>

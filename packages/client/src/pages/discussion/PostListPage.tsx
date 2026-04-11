@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePosts, useBoards } from '@/services/discussions';
+import { useT } from '@/lib/i18n';
 import type { DiscussionPost } from '@/types';
 
 const POSTS_PER_PAGE = 15;
@@ -24,12 +25,12 @@ function excerpt(text: string, maxLen = 100): string {
   return text.slice(0, maxLen) + '...';
 }
 
-function authorDisplay(post: DiscussionPost): {
+function authorDisplay(post: DiscussionPost, t: ReturnType<typeof useT>): {
   name: string;
   isAnon: boolean;
 } {
-  if (post.is_anonymous) return { name: '匿名業戶', isAnon: true };
-  return { name: post.author?.name ?? '用戶', isAnon: false };
+  if (post.is_anonymous) return { name: t.common.anonymous, isAnon: true };
+  return { name: post.author?.name ?? t.common.user, isAnon: false };
 }
 
 function formatDate(iso: string): string {
@@ -39,7 +40,8 @@ function formatDate(iso: string): string {
 
 function PostCard({ post }: { post: DiscussionPost }) {
   const navigate = useNavigate();
-  const { name, isAnon } = authorDisplay(post);
+  const t = useT();
+  const { name, isAnon } = authorDisplay(post, t);
   const reactionCount = (post as any).reactionCount ?? post.reactions?.length ?? 0;
   const commentCount = (post as any).commentCount ?? post.comments?.length ?? 0;
   const imageCount = (post as any).imageCount ?? post.images?.length ?? 0;
@@ -54,7 +56,7 @@ function PostCard({ post }: { post: DiscussionPost }) {
         {post.is_pinned && (
           <div className="mb-1 flex items-center gap-1 text-xs text-primary">
             <HugeiconsIcon icon={PinIcon} size={14} />
-            <span>置頂</span>
+            <span>{t.common.pinned}</span>
           </div>
         )}
 
@@ -96,6 +98,7 @@ export default function PostListPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
+  const t = useT();
 
   const { data: boards } = useBoards();
   const board = boards?.find((b) => b.id === boardId);
@@ -125,16 +128,16 @@ export default function PostListPage() {
           variant="ghost"
           size="icon-sm"
           onClick={() => navigate('/discussion')}
-          aria-label="返回討論區"
+          aria-label={t.posts.backToBoards}
         >
           <HugeiconsIcon icon={ArrowLeft01Icon} size={20} />
         </Button>
         <div>
-          <h1 className="text-xl font-bold">{board?.name ?? '帖文列表'}</h1>
+          <h1 className="text-xl font-bold">{board?.name ?? t.posts.title}</h1>
           {board && (
             <Badge variant="secondary" className="mt-1">
               {board.scope_type === 'estate'
-                ? '全屋苑'
+                ? t.boards.allEstate
                 : board.scope_block ?? board.scope_floor ?? ''}
             </Badge>
           )}
@@ -153,14 +156,14 @@ export default function PostListPage() {
       {/* Error */}
       {isError && (
         <p className="text-sm text-muted-foreground">
-          無法載入帖文，請稍後再試。
+          {t.posts.loadError}
         </p>
       )}
 
       {/* Empty */}
       {!isLoading && !isError && posts.length === 0 && (
         <p className="py-12 text-center text-sm text-muted-foreground">
-          暫無帖文
+          {t.posts.empty}
         </p>
       )}
 
@@ -203,7 +206,7 @@ export default function PostListPage() {
         className="fixed bottom-20 right-4 z-30 h-14 w-14 rounded-full shadow-lg md:bottom-6"
         size="icon-lg"
         onClick={() => navigate(`/discussion/${boardId}/new`)}
-        aria-label="發佈新帖文"
+        aria-label={t.posts.newPost}
       >
         <HugeiconsIcon icon={PlusSignIcon} size={24} />
       </Button>

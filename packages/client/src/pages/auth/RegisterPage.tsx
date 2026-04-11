@@ -31,10 +31,8 @@ import { useAuthStore } from '@/stores/auth-store';
 import { register } from '@/services/auth';
 import { useBlocks, useFloors, useUnits } from '@/services/flats';
 import api from '@/lib/api';
-
-// ─── Constants ──────────────────────────────────────────────────
-
-const STEP_LABELS = ['選擇單位', '驗證密碼', '建立帳戶'];
+import { useT } from '@/lib/i18n';
+import type { Translations } from '@/lib/translations';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -64,12 +62,16 @@ function validateEmail(email: string): boolean {
 
 function StepIndicator({
   currentStep,
+  t,
 }: {
   currentStep: number;
+  t: Translations;
 }) {
+  const stepLabels = [t.register.step1, t.register.step2, t.register.step3];
+
   return (
     <div className="mb-6 flex items-center justify-center gap-0">
-      {STEP_LABELS.map((label, index) => {
+      {stepLabels.map((label, index) => {
         const stepNum = index + 1;
         const isDone = currentStep > stepNum;
         const isActive = currentStep === stepNum;
@@ -127,6 +129,7 @@ function Step1({
   blocks,
   floors,
   units,
+  t,
 }: {
   data: Step1Data;
   errors: FieldErrors;
@@ -135,30 +138,31 @@ function Step1({
   blocks: string[];
   floors: string[];
   units: string[];
+  t: Translations;
 }) {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold">選擇你的單位</h2>
+        <h2 className="text-xl font-bold">{t.register.step1Title}</h2>
         <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-          請選擇你所屬的座數及單位號碼
+          {t.register.step1Subtitle}
         </p>
       </div>
 
       {/* Block */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">座 (Block)</Label>
+        <Label className="text-sm font-medium">{t.common.block}</Label>
         <Select
           value={data.block || undefined}
           onValueChange={(v) => onChange('block', v)}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="選擇座數" />
+            <SelectValue placeholder={t.register.selectBlock} />
           </SelectTrigger>
           <SelectContent>
             {blocks.map((b) => (
               <SelectItem key={b} value={b}>
-                {b}座
+                {b}{t.register.blockSuffix}
               </SelectItem>
             ))}
           </SelectContent>
@@ -170,19 +174,19 @@ function Step1({
 
       {/* Floor */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">樓層 (Floor)</Label>
+        <Label className="text-sm font-medium">{t.common.floor}</Label>
         <Select
           value={data.floor || undefined}
           onValueChange={(v) => onChange('floor', v)}
           disabled={!data.block}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="選擇樓層" />
+            <SelectValue placeholder={t.register.selectFloor} />
           </SelectTrigger>
           <SelectContent>
             {floors.map((f) => (
               <SelectItem key={f} value={f}>
-                {f}樓
+                {f}{t.register.floorSuffix}
               </SelectItem>
             ))}
           </SelectContent>
@@ -194,14 +198,14 @@ function Step1({
 
       {/* Unit */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">單位 (Unit)</Label>
+        <Label className="text-sm font-medium">{t.common.unit}</Label>
         <Select
           value={data.unitNumber || undefined}
           onValueChange={(v) => onChange('unitNumber', v)}
           disabled={!data.block || !data.floor}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="選擇單位" />
+            <SelectValue placeholder={t.register.selectUnit} />
           </SelectTrigger>
           <SelectContent>
             {units.map((u) => (
@@ -217,13 +221,13 @@ function Step1({
       </div>
 
       <Button type="button" className="h-11 w-full" onClick={onNext}>
-        下一步
+        {t.register.next}
       </Button>
 
       <div className="text-center text-sm">
-        已有帳戶？{' '}
+        {t.register.hasAccount}{' '}
         <Link to="/login" className="text-primary font-medium">
-          登入
+          {t.register.login}
         </Link>
       </div>
     </div>
@@ -240,6 +244,7 @@ function Step2({
   onChange,
   onBack,
   onNext,
+  t,
 }: {
   flatLabel: string;
   flatPassword: string;
@@ -248,29 +253,31 @@ function Step2({
   onChange: (value: string) => void;
   onBack: () => void;
   onNext: () => void;
+  t: Translations;
 }) {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold">輸入單位註冊密碼</h2>
+        <h2 className="text-xl font-bold">{t.register.step2Title}</h2>
         <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-          請輸入管理處提供的單位註冊密碼
+          {t.register.step2Subtitle}
         </p>
       </div>
 
       {/* Selected flat display */}
       <div className="bg-muted rounded-md p-3 text-sm">
-        已選擇: {flatLabel}
+        {t.register.selected}: {flatLabel}
       </div>
 
       {/* Flat registration password */}
       <div className="space-y-2">
         <Label htmlFor="flatPassword" className="text-sm font-medium">
-          單位註冊密碼 (Registration Password)
+          {t.register.regPassword}
         </Label>
         <Input
           id="flatPassword"
           type="password"
+          placeholder={t.register.regPasswordPlaceholder}
           value={flatPassword}
           onChange={(e) => onChange(e.target.value)}
           disabled={isLoading}
@@ -287,7 +294,7 @@ function Step2({
           onClick={onBack}
           disabled={isLoading}
         >
-          &larr; 上一步
+          {t.register.prev}
         </Button>
         <Button
           type="button"
@@ -301,7 +308,7 @@ function Step2({
               className="animate-spin"
             />
           ) : (
-            '下一步'
+            t.register.next
           )}
         </Button>
       </div>
@@ -319,6 +326,7 @@ function Step3({
   onChange,
   onBack,
   onSubmit,
+  t,
 }: {
   data: Step3Data;
   errors: FieldErrors;
@@ -327,13 +335,14 @@ function Step3({
   onChange: (field: keyof Step3Data, value: string) => void;
   onBack: () => void;
   onSubmit: () => void;
+  t: Translations;
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
     <div className="space-y-5">
-      <h2 className="text-xl font-bold">建立你的帳戶</h2>
+      <h2 className="text-xl font-bold">{t.register.step3Title}</h2>
 
       {serverError && (
         <Alert variant="destructive">
@@ -344,7 +353,7 @@ function Step3({
       {/* Name */}
       <div className="space-y-2">
         <Label htmlFor="name" className="text-sm font-medium">
-          姓名 (Name)
+          {t.register.name}
         </Label>
         <Input
           id="name"
@@ -361,12 +370,12 @@ function Step3({
       {/* Email */}
       <div className="space-y-2">
         <Label htmlFor="regEmail" className="text-sm font-medium">
-          電郵地址 (Email)
+          {t.register.email}
         </Label>
         <Input
           id="regEmail"
           type="email"
-          placeholder="name@example.com"
+          placeholder={t.login.emailPlaceholder}
           value={data.email}
           onChange={(e) => onChange('email', e.target.value)}
           disabled={isLoading}
@@ -380,7 +389,7 @@ function Step3({
       {/* Phone (optional) */}
       <div className="space-y-2">
         <Label htmlFor="phone" className="text-sm font-medium">
-          電話號碼 (Phone) — 選填
+          {t.register.phone}
         </Label>
         <Input
           id="phone"
@@ -394,7 +403,7 @@ function Step3({
       {/* Password */}
       <div className="space-y-2">
         <Label htmlFor="regPassword" className="text-sm font-medium">
-          密碼 (Password)
+          {t.register.password}
         </Label>
         <div className="relative">
           <Input
@@ -411,7 +420,7 @@ function Step3({
             onClick={() => setShowPassword(!showPassword)}
             className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
             tabIndex={-1}
-            aria-label={showPassword ? '隱藏密碼' : '顯示密碼'}
+            aria-label={showPassword ? t.login.hidePassword : t.login.showPassword}
           >
             <HugeiconsIcon
               icon={showPassword ? ViewOffIcon : ViewIcon}
@@ -419,7 +428,7 @@ function Step3({
             />
           </button>
         </div>
-        <p className="text-muted-foreground text-xs">最少8個字元</p>
+        <p className="text-muted-foreground text-xs">{t.register.passwordHint}</p>
         {errors.password && (
           <p className="text-destructive text-sm">{errors.password}</p>
         )}
@@ -428,7 +437,7 @@ function Step3({
       {/* Confirm password */}
       <div className="space-y-2">
         <Label htmlFor="confirmPassword" className="text-sm font-medium">
-          確認密碼 (Confirm Password)
+          {t.register.confirmPassword}
         </Label>
         <div className="relative">
           <Input
@@ -445,7 +454,7 @@ function Step3({
             onClick={() => setShowConfirm(!showConfirm)}
             className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
             tabIndex={-1}
-            aria-label={showConfirm ? '隱藏密碼' : '顯示密碼'}
+            aria-label={showConfirm ? t.login.hidePassword : t.login.showPassword}
           >
             <HugeiconsIcon
               icon={showConfirm ? ViewOffIcon : ViewIcon}
@@ -468,7 +477,7 @@ function Step3({
           onClick={onBack}
           disabled={isLoading}
         >
-          &larr; 上一步
+          {t.register.prev}
         </Button>
         <Button type="button" onClick={onSubmit} disabled={isLoading}>
           {isLoading ? (
@@ -478,7 +487,7 @@ function Step3({
               className="animate-spin"
             />
           ) : (
-            '註冊'
+            t.register.submit
           )}
         </Button>
       </div>
@@ -491,6 +500,7 @@ function Step3({
 export default function RegisterPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const t = useT();
 
   const [step, setStep] = useState(1);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -522,14 +532,14 @@ export default function RegisterPage() {
   });
 
   // ─── Flat label ───────────────────────────────────────────────
-  const flatLabel = `${step1.block}座 ${step1.floor}樓 ${step1.unitNumber}號`;
+  const flatLabel = `${step1.block}${t.register.blockSuffix} ${step1.floor}${t.register.floorSuffix} ${step1.unitNumber}`;
 
   // ─── Step 1 validation ────────────────────────────────────────
   function validateStep1(): boolean {
     const errors: FieldErrors = {};
-    if (!step1.block) errors.block = '請選擇座數';
-    if (!step1.floor) errors.floor = '請選擇樓層';
-    if (!step1.unitNumber) errors.unitNumber = '請選擇單位';
+    if (!step1.block) errors.block = t.register.errorRequired.block;
+    if (!step1.floor) errors.floor = t.register.errorRequired.floor;
+    if (!step1.unitNumber) errors.unitNumber = t.register.errorRequired.unit;
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -537,7 +547,7 @@ export default function RegisterPage() {
   // ─── Step 2 validation (calls backend) ────────────────────────
   async function validateStep2(): Promise<boolean> {
     if (!flatPassword.trim()) {
-      setFlatPasswordError('請輸入註冊密碼');
+      setFlatPasswordError(t.register.regPasswordPlaceholder);
       return false;
     }
 
@@ -552,7 +562,7 @@ export default function RegisterPage() {
       });
       return true;
     } catch {
-      setFlatPasswordError('註冊密碼不正確 (Incorrect registration password)');
+      setFlatPasswordError(t.register.regPasswordError);
       return false;
     } finally {
       setIsLoading(false);
@@ -564,22 +574,22 @@ export default function RegisterPage() {
     const errors: FieldErrors = {};
 
     if (!step3.name.trim()) {
-      errors.name = '請輸入姓名';
+      errors.name = t.register.errorRequired.name;
     }
     if (!step3.email.trim()) {
-      errors.email = '請輸入電郵地址';
+      errors.email = t.register.errorRequired.email;
     } else if (!validateEmail(step3.email)) {
-      errors.email = '電郵格式不正確';
+      errors.email = t.register.errorFormat.email;
     }
     if (!step3.password) {
-      errors.password = '請輸入密碼';
+      errors.password = t.register.errorRequired.password;
     } else if (step3.password.length < 8) {
-      errors.password = '密碼最少需要8個字元';
+      errors.password = t.register.errorFormat.passwordMin;
     }
     if (!step3.confirmPassword) {
-      errors.confirmPassword = '請確認密碼';
+      errors.confirmPassword = t.register.errorRequired.confirmPassword;
     } else if (step3.password !== step3.confirmPassword) {
-      errors.confirmPassword = '密碼不一致';
+      errors.confirmPassword = t.register.errorFormat.passwordMismatch;
     }
 
     setFieldErrors(errors);
@@ -632,7 +642,7 @@ export default function RegisterPage() {
       const message = (
         err as { response?: { data?: { message?: string } } }
       )?.response?.data?.message;
-      setServerError(message || '註冊失敗，請稍後再試');
+      setServerError(message || t.register.errorGeneric);
     } finally {
       setIsLoading(false);
     }
@@ -641,11 +651,11 @@ export default function RegisterPage() {
   return (
     <Card className="mx-auto w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-bold">註冊</CardTitle>
-        <CardDescription>建立你的 YUENVOICE 帳戶</CardDescription>
+        <CardTitle className="text-2xl font-bold">{t.register.title}</CardTitle>
+        <CardDescription>{t.register.subtitle}</CardDescription>
       </CardHeader>
       <CardContent>
-        <StepIndicator currentStep={step} />
+        <StepIndicator currentStep={step} t={t} />
 
         {step === 1 && (
           <Step1
@@ -667,6 +677,7 @@ export default function RegisterPage() {
             blocks={blocks}
             floors={floors}
             units={units}
+            t={t}
           />
         )}
 
@@ -685,6 +696,7 @@ export default function RegisterPage() {
               setFlatPasswordError('');
             }}
             onNext={handleNextStep2}
+            t={t}
           />
         )}
 
@@ -701,6 +713,7 @@ export default function RegisterPage() {
               setServerError('');
             }}
             onSubmit={handleSubmit}
+            t={t}
           />
         )}
       </CardContent>

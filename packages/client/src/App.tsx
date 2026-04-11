@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth-store';
+import { useT } from '@/lib/i18n';
 import axios from 'axios';
 
 // Layouts
@@ -42,11 +43,12 @@ import AuditLogPage from '@/pages/admin/AuditLogPage';
 function ProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isInitialized = useAuthStore((s) => s.isInitialized);
+  const t = useT();
 
   if (!isInitialized) {
     return (
       <div className="flex h-svh items-center justify-center">
-        <p className="text-muted-foreground">載入中...</p>
+        <p className="text-muted-foreground">{t.common.loading}</p>
       </div>
     );
   }

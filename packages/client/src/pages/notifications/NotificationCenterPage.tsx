@@ -12,6 +12,7 @@ import {
 import { isPushSupported, requestPushPermission, subscribeToPush } from '@/lib/push';
 import api from '@/lib/api';
 import { useNotificationStore } from '@/stores/notification-store';
+import { useT } from '@/lib/i18n';
 import type { NotificationCategory, UserNotification } from '@/types';
 
 import { Badge } from '@/components/ui/badge';
@@ -21,33 +22,40 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
-const categoryConfig: Record<
-  NotificationCategory,
-  { label: string; className: string }
-> = {
-  urgent: { label: '緊急', className: 'bg-red-100 text-red-800 border-red-200' },
-  general: { label: '一般', className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  event: { label: '活動', className: 'bg-green-100 text-green-800 border-green-200' },
+const categoryStyleMap: Record<NotificationCategory, string> = {
+  urgent: 'bg-red-100 text-red-800 border-red-200',
+  general: 'bg-blue-100 text-blue-800 border-blue-200',
+  event: 'bg-green-100 text-green-800 border-green-200',
 };
-
-function relativeTime(dateStr: string): string {
-  const now = Date.now();
-  const diff = now - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return '剛剛';
-  if (minutes < 60) return `${minutes} 分鐘前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小時前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
-  const months = Math.floor(days / 30);
-  return `${months} 個月前`;
-}
 
 export default function NotificationCenterPage() {
   const queryClient = useQueryClient();
   const storeMarkAsRead = useNotificationStore((s) => s.markAsRead);
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
+  const t = useT();
+
+  const categoryConfig: Record<
+    NotificationCategory,
+    { label: string; className: string }
+  > = {
+    urgent: { label: t.notifCategory.urgent, className: categoryStyleMap.urgent },
+    general: { label: t.notifCategory.general, className: categoryStyleMap.general },
+    event: { label: t.notifCategory.event, className: categoryStyleMap.event },
+  };
+
+  function relativeTime(dateStr: string): string {
+    const now = Date.now();
+    const diff = now - new Date(dateStr).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return t.time.justNow;
+    if (minutes < 60) return t.time.minutesAgo(minutes);
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t.time.hoursAgo(hours);
+    const days = Math.floor(hours / 24);
+    if (days < 30) return t.time.daysAgo(days);
+    const months = Math.floor(days / 30);
+    return t.time.monthsAgo(months);
+  }
 
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
@@ -68,14 +76,14 @@ export default function NotificationCenterPage() {
       const granted = await requestPushPermission();
       if (!granted) {
         setPushStatus('denied');
-        setPushError('請在瀏覽器設定中允許通知權限');
+        setPushError(t.notifications.permissionHint);
         return;
       }
 
       const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
       if (!vapidKey) {
         setPushStatus('error');
-        setPushError('VAPID 金鑰未設定，請檢查 .env 設定');
+        setPushError(t.notifications.vapidError);
         return;
       }
 
@@ -91,7 +99,7 @@ export default function NotificationCenterPage() {
       }
     } catch (err: any) {
       setPushStatus('error');
-      setPushError(err?.response?.data?.error ?? err?.message ?? '推送測試失敗');
+      setPushError(err?.response?.data?.error ?? err?.message ?? t.notifications.testFailed);
     }
   }
 
@@ -131,7 +139,7 @@ export default function NotificationCenterPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4">
-      <h1 className="mb-6 text-2xl font-bold">通知中心</h1>
+      <h1 className="mb-6 text-2xl font-bold">{t.notifications.title}</h1>
 
       {/* Controls */}
       <div className="mb-4 flex items-center justify-between">
@@ -145,7 +153,7 @@ export default function NotificationCenterPage() {
             }}
           />
           <Label htmlFor="unread-filter" className="cursor-pointer text-sm">
-            只顯示未讀
+            {t.notifications.unreadOnly}
           </Label>
         </div>
 
@@ -156,7 +164,7 @@ export default function NotificationCenterPage() {
           onClick={() => markAllReadMutation.mutate()}
           disabled={markAllReadMutation.isPending}
         >
-          全部標為已讀
+          {t.notifications.markAllRead}
         </Button>
       </div>
 
@@ -164,9 +172,9 @@ export default function NotificationCenterPage() {
       <div className="mb-4 rounded-lg border border-border p-3">
         <div className="flex items-center gap-2">
           <HugeiconsIcon icon={Notification03Icon} size={18} className="text-muted-foreground" />
-          <span className="flex-1 text-sm text-muted-foreground">推送通知</span>
+          <span className="flex-1 text-sm text-muted-foreground">{t.notifications.pushNotifications}</span>
           {pushStatus === 'unsupported' ? (
-            <span className="text-xs text-muted-foreground">瀏覽器不支援</span>
+            <span className="text-xs text-muted-foreground">{t.notifications.browserNotSupported}</span>
           ) : (
             <Button
               variant="outline"
@@ -174,10 +182,10 @@ export default function NotificationCenterPage() {
               onClick={handleTestPush}
               disabled={pushStatus === 'subscribing' || pushStatus === 'sending'}
             >
-              {pushStatus === 'subscribing' && '訂閱中...'}
-              {pushStatus === 'sending' && '發送中...'}
-              {pushStatus === 'sent' && '已發送 ✓'}
-              {(pushStatus === 'idle' || pushStatus === 'subscribed' || pushStatus === 'denied' || pushStatus === 'error') && '測試推送'}
+              {pushStatus === 'subscribing' && t.notifications.subscribing}
+              {pushStatus === 'sending' && t.notifications.testSending}
+              {pushStatus === 'sent' && t.notifications.testSent}
+              {(pushStatus === 'idle' || pushStatus === 'subscribed' || pushStatus === 'denied' || pushStatus === 'error') && t.notifications.testPush}
             </Button>
           )}
         </div>
@@ -200,7 +208,7 @@ export default function NotificationCenterPage() {
             size={48}
             className="opacity-40"
           />
-          <p className="text-sm">暫無通知</p>
+          <p className="text-sm">{t.notifications.empty}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -258,7 +266,7 @@ export default function NotificationCenterPage() {
 
                     {/* Sender + Time */}
                     <p className="mt-1.5 text-xs text-muted-foreground">
-                      {notif?.sender?.name ?? '系統'}
+                      {notif?.sender?.name ?? t.adminDashboard.system}
                       {' \u00B7 '}
                       {notif ? relativeTime(notif.created_at) : ''}
                     </p>
@@ -277,7 +285,7 @@ export default function NotificationCenterPage() {
           className="mt-6 w-full"
           onClick={() => setPage((p) => p + 1)}
         >
-          載入更多
+          {t.common.loadMore}
         </Button>
       )}
     </div>

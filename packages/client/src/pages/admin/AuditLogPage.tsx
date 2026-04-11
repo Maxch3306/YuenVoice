@@ -10,6 +10,7 @@ import {
 } from '@hugeicons/core-free-icons';
 
 import { getAuditLogs } from '@/services/admin';
+import { useT } from '@/lib/i18n';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -30,24 +31,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-const actionOptions: { value: string; label: string }[] = [
-  { value: '', label: '所有操作' },
-  { value: 'role_update', label: '角色更新' },
-  { value: 'status_update', label: '狀態更新' },
-  { value: 'password_reset', label: '密碼重設' },
-  { value: 'document_delete', label: '文件刪除' },
-  { value: 'post_manage', label: '帖文管理' },
-];
-
-const entityTypeOptions: { value: string; label: string }[] = [
-  { value: '', label: '所有類型' },
-  { value: 'User', label: 'User' },
-  { value: 'Report', label: 'Report' },
-  { value: 'Flat', label: 'Flat' },
-  { value: 'Post', label: 'Post' },
-  { value: 'Document', label: 'Document' },
-];
-
 function formatTimestamp(dateStr: string) {
   const d = new Date(dateStr);
   const month = d.getMonth() + 1;
@@ -58,6 +41,7 @@ function formatTimestamp(dateStr: string) {
 }
 
 export default function AuditLogPage() {
+  const t = useT();
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState('');
@@ -65,6 +49,24 @@ export default function AuditLogPage() {
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const actionOptions: { value: string; label: string }[] = [
+    { value: '', label: t.adminAudit.allActions },
+    { value: 'role_update', label: t.adminAudit.actions.role_change },
+    { value: 'status_update', label: t.adminAudit.actions.status_change },
+    { value: 'password_reset', label: t.adminAudit.actions.password_reset },
+    { value: 'document_delete', label: t.adminAudit.actions.document_delete },
+    { value: 'post_manage', label: t.adminAudit.actions.post_moderate },
+  ];
+
+  const entityTypeOptions: { value: string; label: string }[] = [
+    { value: '', label: t.adminAudit.allTypes },
+    { value: 'User', label: t.adminAudit.entityTypes.User },
+    { value: 'Report', label: t.adminAudit.entityTypes.Report },
+    { value: 'Flat', label: t.adminAudit.entityTypes.Flat },
+    { value: 'Post', label: t.adminAudit.entityTypes.Post },
+    { value: 'Document', label: t.adminAudit.entityTypes.Document },
+  ];
 
   const { data, isLoading } = useQuery({
     queryKey: [
@@ -107,7 +109,7 @@ export default function AuditLogPage() {
 
   return (
     <div className="p-4 lg:p-6">
-      <h1 className="mb-6 text-2xl font-bold">審計日誌</h1>
+      <h1 className="mb-6 text-2xl font-bold">{t.adminAudit.title}</h1>
 
       {/* Filters */}
       <div className="mb-4 space-y-3">
@@ -120,7 +122,7 @@ export default function AuditLogPage() {
             />
             <Input
               className="pl-9"
-              placeholder="搜尋用戶..."
+              placeholder={t.adminAudit.searchPlaceholder}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -136,7 +138,7 @@ export default function AuditLogPage() {
             }}
           >
             <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="所有操作" />
+              <SelectValue placeholder={t.adminAudit.allActions} />
             </SelectTrigger>
             <SelectContent>
               {actionOptions.map((opt) => (
@@ -157,7 +159,7 @@ export default function AuditLogPage() {
             }}
           >
             <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="所有類型" />
+              <SelectValue placeholder={t.adminAudit.allTypes} />
             </SelectTrigger>
             <SelectContent>
               {entityTypeOptions.map((opt) => (
@@ -171,7 +173,7 @@ export default function AuditLogPage() {
           <Input
             type="date"
             className="w-full sm:w-40"
-            placeholder="開始日期"
+            placeholder={t.adminAudit.startDate}
             value={startDate}
             onChange={(e) => {
               setStartDate(e.target.value);
@@ -181,7 +183,7 @@ export default function AuditLogPage() {
           <Input
             type="date"
             className="w-full sm:w-40"
-            placeholder="結束日期"
+            placeholder={t.adminAudit.endDate}
             value={endDate}
             onChange={(e) => {
               setEndDate(e.target.value);
@@ -203,11 +205,11 @@ export default function AuditLogPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>時間</TableHead>
-                <TableHead>用戶</TableHead>
-                <TableHead>操作</TableHead>
-                <TableHead className="hidden sm:table-cell">類型</TableHead>
-                <TableHead className="w-16">詳情</TableHead>
+                <TableHead>{t.adminAudit.colTime}</TableHead>
+                <TableHead>{t.adminAudit.colUser}</TableHead>
+                <TableHead>{t.adminAudit.colAction}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t.adminAudit.colType}</TableHead>
+                <TableHead className="w-16">{t.adminAudit.colDetails}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -217,7 +219,7 @@ export default function AuditLogPage() {
                     colSpan={5}
                     className="py-8 text-center text-muted-foreground"
                   >
-                    沒有找到日誌
+                    {t.adminAudit.noLogs}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -232,7 +234,7 @@ export default function AuditLogPage() {
                         {formatTimestamp(log.created_at)}
                       </TableCell>
                       <TableCell className="font-medium">
-                        {log.user?.name ?? '—'}
+                        {log.user?.name ?? '\u2014'}
                       </TableCell>
                       <TableCell>{log.action}</TableCell>
                       <TableCell className="hidden sm:table-cell">
@@ -256,7 +258,7 @@ export default function AuditLogPage() {
                         <TableCell colSpan={5} className="bg-muted/50 p-0">
                           <div className="px-4 py-3">
                             <p className="mb-1 text-xs text-muted-foreground sm:hidden">
-                              類型: {log.entity_type} | ID: {log.entity_id}
+                              {t.adminAudit.colType}: {log.entity_type} | ID: {log.entity_id}
                             </p>
                             <p className="mb-1 hidden text-xs text-muted-foreground sm:block">
                               Entity ID: {log.entity_id}

@@ -5,6 +5,7 @@ import { ArrowLeft01Icon, Download01Icon, Delete01Icon } from '@hugeicons/core-f
 
 import { getDocument, deleteDocument } from '@/services/oc';
 import { useAuthStore } from '@/stores/auth-store';
+import { useT } from '@/lib/i18n';
 import type { OcDocumentType } from '@/types';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,13 +23,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-
-const typeLabelMap: Record<OcDocumentType, string> = {
-  meeting_minutes: '會議記錄',
-  financial_statement: '財務報表',
-  resolution: '決議公告',
-  notice: '一般通知',
-};
 
 const typeColorMap: Record<OcDocumentType, string> = {
   meeting_minutes: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -51,6 +45,14 @@ export default function DocumentViewPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const canDelete = user?.role === 'oc_committee' || user?.role === 'admin';
+  const t = useT();
+
+  const typeLabelMap: Record<OcDocumentType, string> = {
+    meeting_minutes: t.docType.meeting_minutes,
+    financial_statement: t.docType.financial_statement,
+    resolution: t.docType.resolution,
+    notice: t.docType.notice,
+  };
 
   const { data: doc, isLoading } = useQuery({
     queryKey: ['oc-document', id],
@@ -89,10 +91,10 @@ export default function DocumentViewPage() {
       <div className="mx-auto max-w-3xl p-4">
         <Button variant="ghost" onClick={() => navigate('/oc')}>
           <HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-          <span className="ml-1">返回</span>
+          <span className="ml-1">{t.docView.back}</span>
         </Button>
         <div className="mt-16 text-center text-muted-foreground">
-          找不到文件
+          {t.docView.notFound}
         </div>
       </div>
     );
@@ -107,7 +109,7 @@ export default function DocumentViewPage() {
         onClick={() => navigate('/oc')}
       >
         <HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-        <span className="ml-1">返回</span>
+        <span className="ml-1">{t.docView.back}</span>
       </Button>
 
       {/* Metadata Card */}
@@ -124,15 +126,15 @@ export default function DocumentViewPage() {
 
           <div className="space-y-1 text-sm text-muted-foreground">
             {doc.publisher && (
-              <p>發佈者: {doc.publisher.name}</p>
+              <p>{t.docView.publisher}: {doc.publisher.name}</p>
             )}
-            <p>發佈日期: {formatDate(doc.created_at)}</p>
-            <p>年份: {doc.year}</p>
+            <p>{t.docView.publishDate}: {formatDate(doc.created_at)}</p>
+            <p>{t.docView.yearLabel}: {doc.year}</p>
           </div>
 
           {doc.description && (
             <div>
-              <p className="mb-1 text-sm font-medium">描述:</p>
+              <p className="mb-1 text-sm font-medium">{t.docView.descriptionLabel}:</p>
               <p className="text-sm text-muted-foreground">
                 {doc.description}
               </p>
@@ -143,7 +145,7 @@ export default function DocumentViewPage() {
             <Button variant="outline" asChild>
               <a href={fileUrl} download>
                 <HugeiconsIcon icon={Download01Icon} size={16} />
-                <span className="ml-1.5">下載</span>
+                <span className="ml-1.5">{t.common.download}</span>
               </a>
             </Button>
 
@@ -152,25 +154,25 @@ export default function DocumentViewPage() {
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive">
                     <HugeiconsIcon icon={Delete01Icon} size={16} />
-                    <span className="ml-1.5">刪除</span>
+                    <span className="ml-1.5">{t.common.delete}</span>
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>確定刪除此文件？</AlertDialogTitle>
+                    <AlertDialogTitle>{t.docView.deleteConfirmTitle}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      此操作無法復原。
+                      {t.docView.deleteConfirmMessage}
                       <br />
-                      文件：{doc.title}
+                      {t.docView.deleteConfirmLabel(doc.title)}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => deleteMutation.mutate()}
                       disabled={deleteMutation.isPending}
                     >
-                      {deleteMutation.isPending ? '刪除中...' : '確定刪除'}
+                      {deleteMutation.isPending ? t.common.deleting : t.common.confirm}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -203,7 +205,7 @@ export default function DocumentViewPage() {
 
       {!isPdf(doc.file_path) && !isImage(doc.file_path) && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border py-16 text-muted-foreground">
-          <p className="text-sm">此文件格式無法在線預覽，請下載查看。</p>
+          <p className="text-sm">{t.docView.noPreview}</p>
         </div>
       )}
     </div>

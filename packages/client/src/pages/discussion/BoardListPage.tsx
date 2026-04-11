@@ -5,12 +5,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBoards } from '@/services/discussions';
+import { useT } from '@/lib/i18n';
+import type { Translations } from '@/lib/translations';
 import type { DiscussionBoard } from '@/types';
 
-function scopeLabel(board: DiscussionBoard): string {
-  if (board.scope_type === 'estate') return '全屋苑';
-  if (board.scope_type === 'block') return board.scope_block ?? '座';
-  return board.scope_floor ?? '樓層';
+function scopeLabel(board: DiscussionBoard, t: Pick<Translations, 'boards'>): string {
+  if (board.scope_type === 'estate') return t.boards.allEstate;
+  if (board.scope_type === 'block') return board.scope_block ? t.boards.blockTarget(board.scope_block) : t.boards.allEstate;
+  return board.scope_floor && board.scope_block ? t.boards.floorTarget(board.scope_block, board.scope_floor) : t.boards.allEstate;
 }
 
 function scopeVariant(
@@ -24,10 +26,11 @@ function scopeVariant(
 export default function BoardListPage() {
   const navigate = useNavigate();
   const { data: boards, isLoading, isError } = useBoards();
+  const t = useT();
 
   return (
     <div className="mx-auto max-w-2xl p-4">
-      <h1 className="mb-6 text-2xl font-bold">討論區</h1>
+      <h1 className="mb-6 text-2xl font-bold">{t.boards.title}</h1>
 
       {isLoading && (
         <div className="flex flex-col gap-3">
@@ -39,12 +42,12 @@ export default function BoardListPage() {
 
       {isError && (
         <p className="text-sm text-muted-foreground">
-          無法載入討論板，請稍後再試。
+          {t.boards.loadError}
         </p>
       )}
 
       {boards && boards.length === 0 && (
-        <p className="text-sm text-muted-foreground">暫無討論板</p>
+        <p className="text-sm text-muted-foreground">{t.boards.empty}</p>
       )}
 
       {boards && boards.length > 0 && (
@@ -59,7 +62,7 @@ export default function BoardListPage() {
               <CardContent className="flex items-center gap-4">
                 <div className="min-w-0 flex-1">
                   <Badge variant={scopeVariant(board.scope_type)} className="mb-2">
-                    {scopeLabel(board)}
+                    {scopeLabel(board, t)}
                   </Badge>
                   <h3 className="font-medium">{board.name}</h3>
                 </div>

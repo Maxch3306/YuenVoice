@@ -4,6 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { Search01Icon } from '@hugeicons/core-free-icons';
 
 import { getUsers, updateRole, updateStatus } from '@/services/admin';
+import { useT } from '@/lib/i18n';
 import type { UserRole } from '@/types';
 
 import { Input } from '@/components/ui/input';
@@ -38,26 +39,27 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
 
-const roleLabels: Record<UserRole, string> = {
-  resident: '業戶',
-  oc_committee: '委員',
-  mgmt_staff: '管理',
-  admin: '管理員',
-};
-
-const roleFilterOptions: { value: string; label: string }[] = [
-  { value: '', label: '所有角色' },
-  { value: 'resident', label: '業戶' },
-  { value: 'oc_committee', label: '委員' },
-  { value: 'mgmt_staff', label: '管理' },
-  { value: 'admin', label: '管理員' },
-];
-
 export default function UserManagementPage() {
   const queryClient = useQueryClient();
+  const t = useT();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [page, setPage] = useState(1);
+
+  const roleLabels: Record<UserRole, string> = {
+    resident: t.roles.resident,
+    oc_committee: t.roles.oc_committee,
+    mgmt_staff: t.roles.mgmt_staff,
+    admin: t.roles.admin,
+  };
+
+  const roleFilterOptions: { value: string; label: string }[] = [
+    { value: '', label: t.adminUsers.allRoles },
+    { value: 'resident', label: t.roles.resident },
+    { value: 'oc_committee', label: t.roles.oc_committee },
+    { value: 'mgmt_staff', label: t.roles.mgmt_staff },
+    { value: 'admin', label: t.roles.admin },
+  ];
 
   // Role change confirmation dialog
   const [roleDialog, setRoleDialog] = useState<{
@@ -114,7 +116,7 @@ export default function UserManagementPage() {
 
   return (
     <div className="p-4 lg:p-6">
-      <h1 className="mb-6 text-2xl font-bold">用戶管理</h1>
+      <h1 className="mb-6 text-2xl font-bold">{t.adminUsers.title}</h1>
 
       {/* Controls */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -126,7 +128,7 @@ export default function UserManagementPage() {
           />
           <Input
             className="pl-9"
-            placeholder="搜尋用戶..."
+            placeholder={t.adminUsers.searchPlaceholder}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -142,7 +144,7 @@ export default function UserManagementPage() {
           }}
         >
           <SelectTrigger className="w-full sm:w-40">
-            <SelectValue placeholder="所有角色" />
+            <SelectValue placeholder={t.adminUsers.allRoles} />
           </SelectTrigger>
           <SelectContent>
             {roleFilterOptions.map((opt) => (
@@ -168,11 +170,11 @@ export default function UserManagementPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>姓名</TableHead>
-                  <TableHead>電郵</TableHead>
-                  <TableHead>單位</TableHead>
-                  <TableHead>角色</TableHead>
-                  <TableHead>狀態</TableHead>
+                  <TableHead>{t.adminUsers.colName}</TableHead>
+                  <TableHead>{t.adminUsers.colEmail}</TableHead>
+                  <TableHead>{t.adminUsers.colUnit}</TableHead>
+                  <TableHead>{t.adminUsers.colRole}</TableHead>
+                  <TableHead>{t.adminUsers.colStatus}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -182,7 +184,7 @@ export default function UserManagementPage() {
                       colSpan={5}
                       className="py-8 text-center text-muted-foreground"
                     >
-                      沒有找到用戶
+                      {t.adminUsers.noUsers}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -197,7 +199,7 @@ export default function UserManagementPage() {
                       <TableCell>
                         {user.flat
                           ? `${user.flat.block}-${user.flat.floor}-${user.flat.unit_number}`
-                          : '—'}
+                          : '\u2014'}
                       </TableCell>
                       <TableCell>
                         <Select
@@ -253,7 +255,7 @@ export default function UserManagementPage() {
           <div className="space-y-3 md:hidden">
             {users.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                沒有找到用戶
+                {t.adminUsers.noUsers}
               </p>
             ) : (
               users.map((user) => (
@@ -272,8 +274,7 @@ export default function UserManagementPage() {
                   </p>
                   {user.flat && (
                     <p className="text-xs text-muted-foreground">
-                      {user.flat.block}座 {user.flat.floor}樓{' '}
-                      {user.flat.unit_number}號
+                      {t.adminUsers.unitLabel(user.flat.block, user.flat.floor, user.flat.unit_number)}
                     </p>
                   )}
                   <div className="flex items-center justify-between pt-1">
@@ -353,16 +354,16 @@ export default function UserManagementPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>確定更改用戶角色？</AlertDialogTitle>
+            <AlertDialogTitle>{t.adminUsers.roleChangeTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              用戶: {roleDialog?.userName}
+              {t.adminUsers.roleChangeUser}: {roleDialog?.userName}
               <br />
-              由: {roleDialog ? roleLabels[roleDialog.oldRole] : ''} →{' '}
+              {t.adminUsers.roleChangeFrom}: {roleDialog ? roleLabels[roleDialog.oldRole] : ''} {t.adminUsers.roleChangeTo}{' '}
               {roleDialog ? roleLabels[roleDialog.newRole] : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (roleDialog) {
@@ -374,7 +375,7 @@ export default function UserManagementPage() {
               }}
               disabled={roleMutation.isPending}
             >
-              {roleMutation.isPending ? '更改中...' : '確定更改'}
+              {roleMutation.isPending ? t.common.updating : t.common.confirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -388,14 +389,14 @@ export default function UserManagementPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              確定{statusDialog?.newStatus ? '啟用' : '停用'}此用戶？
+              {statusDialog ? t.adminUsers.statusChangeTitle(statusDialog.newStatus) : ''}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              用戶: {statusDialog?.userName}
+              {t.adminUsers.roleChangeUser}: {statusDialog?.userName}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (statusDialog) {
@@ -407,7 +408,7 @@ export default function UserManagementPage() {
               }}
               disabled={statusMutation.isPending}
             >
-              {statusMutation.isPending ? '更新中...' : '確定'}
+              {statusMutation.isPending ? t.common.updating : t.common.confirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

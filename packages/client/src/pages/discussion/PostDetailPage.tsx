@@ -42,6 +42,7 @@ import {
   useModeratePost,
 } from '@/services/discussions';
 import { useAuthStore } from '@/stores/auth-store';
+import { useT } from '@/lib/i18n';
 import type { DiscussionPost, PostComment as TPostComment } from '@/types';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -68,10 +69,11 @@ function AuthorName({
   isAnonymous: boolean;
   name?: string;
 }) {
+  const t = useT();
   if (isAnonymous) {
-    return <span className="italic text-muted-foreground">匿名業戶</span>;
+    return <span className="italic text-muted-foreground">{t.common.anonymous}</span>;
   }
-  return <span>{name ?? '用戶'}</span>;
+  return <span>{name ?? t.common.user}</span>;
 }
 
 // ─── Image Lightbox ─────────────────────────────────────────────
@@ -88,6 +90,7 @@ function ImageLightbox({
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(initialIndex);
+  const t = useT();
 
   // Sync index when lightbox opens with a different image
   if (open && index !== initialIndex && initialIndex >= 0) {
@@ -100,7 +103,7 @@ function ImageLightbox({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="flex max-h-[90vh] max-w-[90vw] flex-col items-center gap-4 bg-background/95 p-2 sm:p-6">
-        <DialogTitle className="sr-only">圖片瀏覽</DialogTitle>
+        <DialogTitle className="sr-only">{t.postDetail.imageViewer}</DialogTitle>
         <img
           src={`/uploads/${current.file_path}`}
           alt=""
@@ -113,7 +116,7 @@ function ImageLightbox({
               size="icon-sm"
               disabled={index <= 0}
               onClick={() => setIndex((i) => i - 1)}
-              aria-label="上一張"
+              aria-label={t.postDetail.prevImage}
             >
               <HugeiconsIcon icon={ArrowLeft01Icon} size={20} />
             </Button>
@@ -125,7 +128,7 @@ function ImageLightbox({
               size="icon-sm"
               disabled={index >= images.length - 1}
               onClick={() => setIndex((i) => i + 1)}
-              aria-label="下一張"
+              aria-label={t.postDetail.nextImage}
             >
               <HugeiconsIcon icon={ArrowRight01Icon} size={20} />
             </Button>
@@ -142,6 +145,7 @@ function FlagButton({ postId }: { postId: string }) {
   const [reason, setReason] = useState('');
   const [open, setOpen] = useState(false);
   const flag = useFlagPost();
+  const t = useT();
 
   async function handleFlag() {
     await flag.mutateAsync({ postId, reason: reason.trim() || undefined });
@@ -154,29 +158,29 @@ function FlagButton({ postId }: { postId: string }) {
       <AlertDialogTrigger asChild>
         <Button variant="ghost" size="sm" className="text-muted-foreground">
           <HugeiconsIcon icon={Flag01Icon} size={16} />
-          舉報
+          {t.postDetail.flag}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>舉報帖文</AlertDialogTitle>
+          <AlertDialogTitle>{t.postDetail.flagTitle}</AlertDialogTitle>
           <AlertDialogDescription>
-            請說明舉報原因（選填）
+            {t.postDetail.flagPlaceholder}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <Textarea
-          placeholder="舉報原因..."
+          placeholder={t.postDetail.flagPlaceholder}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={3}
         />
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleFlag}
             disabled={flag.isPending}
           >
-            {flag.isPending ? '提交中...' : '確定舉報'}
+            {flag.isPending ? t.common.submitting : t.postDetail.flagSubmit}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -210,6 +214,7 @@ function AddCommentForm({ postId }: { postId: string }) {
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
   const addComment = useAddComment(postId);
+  const t = useT();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -224,7 +229,7 @@ function AddCommentForm({ postId }: { postId: string }) {
   return (
     <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3">
       <Textarea
-        placeholder="輸入留言..."
+        placeholder={t.postDetail.commentPlaceholder}
         value={content}
         onChange={(e) => setContent(e.target.value)}
         rows={3}
@@ -240,7 +245,7 @@ function AddCommentForm({ postId }: { postId: string }) {
             htmlFor="comment-anon"
             className="cursor-pointer text-xs text-muted-foreground"
           >
-            匿名留言
+            {t.postDetail.anonymousComment}
           </Label>
         </div>
         <Button
@@ -249,7 +254,7 @@ function AddCommentForm({ postId }: { postId: string }) {
           disabled={!content.trim() || addComment.isPending}
         >
           <HugeiconsIcon icon={SentIcon} size={16} />
-          {addComment.isPending ? '發送中...' : '發送'}
+          {addComment.isPending ? t.common.sending : t.common.send}
         </Button>
       </div>
     </form>
@@ -266,6 +271,7 @@ function ModerationControls({
   postId: string;
 }) {
   const moderate = useModeratePost(postId);
+  const t = useT();
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -276,30 +282,30 @@ function ModerationControls({
         onClick={() => moderate.mutate(post.is_pinned ? 'unpin' : 'pin')}
       >
         <HugeiconsIcon icon={PinIcon} size={16} />
-        {post.is_pinned ? '取消置頂' : '置頂'}
+        {post.is_pinned ? t.postDetail.unpin : t.postDetail.pin}
       </Button>
 
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button variant="outline" size="sm">
             <HugeiconsIcon icon={ViewOffIcon} size={16} />
-            隱藏
+            {t.postDetail.hidePost}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>隱藏帖文</AlertDialogTitle>
+            <AlertDialogTitle>{t.postDetail.hideTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              確定要隱藏此帖文嗎？隱藏後其他業戶將無法看到。
+              {t.postDetail.hideMessage}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => moderate.mutate('hide')}
               disabled={moderate.isPending}
             >
-              確定隱藏
+              {t.postDetail.hideConfirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -309,23 +315,23 @@ function ModerationControls({
         <AlertDialogTrigger asChild>
           <Button variant="destructive" size="sm">
             <HugeiconsIcon icon={Delete01Icon} size={16} />
-            刪除
+            {t.common.delete}
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>刪除帖文</AlertDialogTitle>
+            <AlertDialogTitle>{t.postDetail.deletePost}</AlertDialogTitle>
             <AlertDialogDescription>
-              確定要刪除此帖文嗎？此操作不可撤銷。
+              {t.postDetail.deleteMessage}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => moderate.mutate('delete')}
               disabled={moderate.isPending}
             >
-              確定刪除
+              {t.postDetail.deleteConfirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -343,6 +349,7 @@ export default function PostDetailPage() {
 
   const { data: post, isLoading, isError } = usePost(postId ?? '');
   const toggleReaction = useToggleReaction(postId ?? '');
+  const t = useT();
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -388,10 +395,10 @@ export default function PostDetailPage() {
           className="mb-4"
         >
           <HugeiconsIcon icon={ArrowLeft01Icon} size={16} />
-          返回
+          {t.postDetail.back}
         </Button>
         <p className="text-sm text-muted-foreground">
-          無法載入帖文，請稍後再試。
+          {t.postDetail.loadError}
         </p>
       </div>
     );
@@ -405,11 +412,11 @@ export default function PostDetailPage() {
           variant="ghost"
           size="icon-sm"
           onClick={() => navigate(`/discussion/${post.board_id}`)}
-          aria-label="返回"
+          aria-label={t.postDetail.back}
         >
           <HugeiconsIcon icon={ArrowLeft01Icon} size={20} />
         </Button>
-        <span className="text-sm text-muted-foreground">帖文詳情</span>
+        <span className="text-sm text-muted-foreground">{t.postDetail.title}</span>
       </div>
 
       {/* Post Header */}
@@ -417,7 +424,7 @@ export default function PostDetailPage() {
         {post.is_pinned && (
           <Badge variant="secondary" className="mb-2">
             <HugeiconsIcon icon={PinIcon} size={12} />
-            置頂
+            {t.common.pinned}
           </Badge>
         )}
         <h2 className="mb-2 text-xl font-bold leading-snug">{post.title}</h2>
@@ -474,7 +481,7 @@ export default function PostDetailPage() {
           className={userReacted ? 'text-primary' : 'text-muted-foreground'}
         >
           <HugeiconsIcon icon={FavouriteIcon} size={18} />
-          讚好 ({reactionCount})
+          {t.postDetail.like} ({reactionCount})
         </Button>
 
         <FlagButton postId={post.id} />
@@ -486,7 +493,7 @@ export default function PostDetailPage() {
           <Separator className="mb-4" />
           <div className="mb-4">
             <p className="mb-2 text-xs font-medium text-muted-foreground">
-              管理操作
+              {t.postDetail.mgmtActions}
             </p>
             <ModerationControls post={post} postId={post.id} />
           </div>
@@ -496,11 +503,11 @@ export default function PostDetailPage() {
       {/* Comments */}
       <Separator className="mb-4" />
       <h3 className="mb-2 text-base font-medium">
-        留言 ({comments.length})
+        {t.postDetail.comments} ({comments.length})
       </h3>
 
       {comments.length === 0 && (
-        <p className="py-4 text-sm text-muted-foreground">暫無留言</p>
+        <p className="py-4 text-sm text-muted-foreground">{t.postDetail.noComments}</p>
       )}
 
       <div className="divide-y divide-border">

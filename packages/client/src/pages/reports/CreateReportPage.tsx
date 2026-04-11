@@ -4,6 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowLeft01Icon, Cancel01Icon, Image01Icon } from '@hugeicons/core-free-icons';
 
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import { useCreateReport } from '@/services/reports';
 import { useBlocks, useFloors } from '@/services/flats';
 
@@ -29,6 +30,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export default function CreateReportPage() {
   const navigate = useNavigate();
+  const t = useT();
   const createReport = useCreateReport();
   const { data: BLOCKS = [] } = useBlocks();
   const { data: FLOORS = [] } = useFloors();
@@ -85,9 +87,9 @@ export default function CreateReportPage() {
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
-    if (!title.trim()) newErrors.title = '請輸入標題';
-    if (!type) newErrors.type = '請選擇類型';
-    if (!description.trim()) newErrors.description = '請輸入詳細描述';
+    if (!title.trim()) newErrors.title = t.createReport.titleRequired;
+    if (!type) newErrors.type = t.createReport.typePlaceholder;
+    if (!description.trim()) newErrors.description = t.createReport.descriptionRequired;
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -121,9 +123,9 @@ export default function CreateReportPage() {
       <div className="mb-4 flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate('/reports')}>
           <HugeiconsIcon icon={ArrowLeft01Icon} className="size-5" />
-          <span className="sr-only">返回</span>
+          <span className="sr-only">{t.common.back}</span>
         </Button>
-        <h1 className="text-xl font-bold">提交新報告</h1>
+        <h1 className="text-xl font-bold">{t.createReport.title}</h1>
       </div>
 
       <Card>
@@ -131,13 +133,13 @@ export default function CreateReportPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Title */}
             <div className="space-y-1.5">
-              <Label htmlFor="title">標題 (Title)</Label>
+              <Label htmlFor="title">{t.createReport.fieldTitle}</Label>
               <Input
                 id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={200}
-                placeholder="請簡述事件"
+                placeholder={t.createReport.titlePlaceholder}
                 aria-invalid={!!errors.title}
               />
               {errors.title && (
@@ -147,15 +149,15 @@ export default function CreateReportPage() {
 
             {/* Type */}
             <div className="space-y-1.5">
-              <Label>類型 (Type)</Label>
+              <Label>{t.createReport.type}</Label>
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger aria-invalid={!!errors.type}>
-                  <SelectValue placeholder="選擇類型" />
+                  <SelectValue placeholder={t.createReport.typePlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="repair">故障維修</SelectItem>
-                  <SelectItem value="complaint">投訴</SelectItem>
-                  <SelectItem value="inquiry">查詢</SelectItem>
+                  <SelectItem value="repair">{t.reportType.maintenance}</SelectItem>
+                  <SelectItem value="complaint">{t.reportType.complaint}</SelectItem>
+                  <SelectItem value="inquiry">{t.reportType.inquiry}</SelectItem>
                 </SelectContent>
               </Select>
               {errors.type && (
@@ -165,14 +167,14 @@ export default function CreateReportPage() {
 
             {/* Description */}
             <div className="space-y-1.5">
-              <Label htmlFor="description">詳細描述 (Description)</Label>
+              <Label htmlFor="description">{t.createReport.description}</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={5000}
                 rows={5}
-                placeholder="請詳細描述事件情況"
+                placeholder={t.createReport.descriptionPlaceholder}
                 aria-invalid={!!errors.description}
               />
               <p className="text-right text-xs text-muted-foreground">
@@ -185,28 +187,28 @@ export default function CreateReportPage() {
 
             {/* Location */}
             <div className="space-y-1.5">
-              <Label>位置 (Location)</Label>
+              <Label>{t.createReport.location}</Label>
               <div className="flex gap-2">
                 <Select value={block} onValueChange={setBlock}>
                   <SelectTrigger className="w-1/2">
-                    <SelectValue placeholder="座" />
+                    <SelectValue placeholder={t.common.block} />
                   </SelectTrigger>
                   <SelectContent>
                     {BLOCKS.map((b) => (
                       <SelectItem key={b} value={b}>
-                        {b}座
+                        {b}{t.common.block}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Select value={floor} onValueChange={setFloor}>
                   <SelectTrigger className="w-1/2">
-                    <SelectValue placeholder="樓層" />
+                    <SelectValue placeholder={t.common.floor} />
                   </SelectTrigger>
                   <SelectContent>
                     {FLOORS.map((f) => (
                       <SelectItem key={f} value={f}>
-                        {f}樓
+                        {f}{t.common.floor}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -215,13 +217,13 @@ export default function CreateReportPage() {
               <Input
                 value={area}
                 onChange={(e) => setArea(e.target.value)}
-                placeholder="具體位置（選填）"
+                placeholder={t.createReport.locationDetail}
               />
             </div>
 
             {/* Photo upload */}
             <div className="space-y-1.5">
-              <Label>附件 (Attachments)</Label>
+              <Label>{t.createReport.attachments}</Label>
               <div
                 className={cn(
                   'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-6 transition-colors hover:border-muted-foreground/50',
@@ -236,10 +238,10 @@ export default function CreateReportPage() {
                   className="mb-2 size-8 text-muted-foreground"
                 />
                 <p className="text-sm text-muted-foreground">
-                  點擊或拖曳上載圖片
+                  {t.createReport.attachmentsHint}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  最多{MAX_FILES}張，每張不超過10MB
+                  {t.createReport.attachmentsLimit(MAX_FILES)}
                 </p>
               </div>
               <input
@@ -264,7 +266,7 @@ export default function CreateReportPage() {
                     >
                       <img
                         src={src}
-                        alt={`附件 ${i + 1}`}
+                        alt={t.createReport.attachmentLabel(i + 1)}
                         className="h-full w-full object-cover"
                       />
                       <button
@@ -289,12 +291,12 @@ export default function CreateReportPage() {
               className="h-11 w-full"
               disabled={createReport.isPending}
             >
-              {createReport.isPending ? '提交中...' : '提交報告'}
+              {createReport.isPending ? t.common.submitting : t.createReport.submit}
             </Button>
 
             {createReport.isError && (
               <p className="text-center text-sm text-destructive">
-                提交失敗，請重試。
+                {t.createReport.submitError}
               </p>
             )}
           </form>

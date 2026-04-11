@@ -22,6 +22,7 @@ import {
   resetFlatPassword,
 } from '@/services/admin';
 import api from '@/lib/api';
+import { useT } from '@/lib/i18n';
 import type { Flat } from '@/types';
 
 import { Input } from '@/components/ui/input';
@@ -66,6 +67,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function FlatManagementPage() {
   const queryClient = useQueryClient();
+  const t = useT();
   const [blockFilter, setBlockFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -236,15 +238,15 @@ export default function FlatManagementPage() {
   return (
     <div className="p-4 lg:p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">單位管理</h1>
+        <h1 className="text-2xl font-bold">{t.adminFlats.title}</h1>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={handleExportCSV}>
             <HugeiconsIcon icon={Download01Icon} size={16} />
-            <span className="ml-1">匯出 CSV</span>
+            <span className="ml-1">{t.adminFlats.exportCsv}</span>
           </Button>
           <Button size="sm" onClick={openAddDialog}>
             <HugeiconsIcon icon={Add01Icon} size={16} />
-            <span className="ml-1">新增單位</span>
+            <span className="ml-1">{t.adminFlats.addFlat}</span>
           </Button>
         </div>
       </div>
@@ -259,13 +261,13 @@ export default function FlatManagementPage() {
           }}
         >
           <SelectTrigger className="w-full sm:w-32">
-            <SelectValue placeholder="所有座" />
+            <SelectValue placeholder={t.adminFlats.allBlocks} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="_all">所有座</SelectItem>
+            <SelectItem value="_all">{t.adminFlats.allBlocks}</SelectItem>
             {blockOptions.map((b) => (
               <SelectItem key={b} value={b}>
-                {b}座
+                {b}{t.common.block}
               </SelectItem>
             ))}
           </SelectContent>
@@ -278,7 +280,7 @@ export default function FlatManagementPage() {
           />
           <Input
             className="pl-9"
-            placeholder="搜尋單位..."
+            placeholder={t.adminFlats.searchPlaceholder}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -300,13 +302,13 @@ export default function FlatManagementPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>座</TableHead>
-                <TableHead>樓層</TableHead>
-                <TableHead>單位</TableHead>
-                <TableHead className="hidden sm:table-cell">住戶數</TableHead>
-                <TableHead>註冊密碼</TableHead>
-                <TableHead>註冊狀態</TableHead>
-                <TableHead className="w-28">操作</TableHead>
+                <TableHead>{t.adminFlats.colBlock}</TableHead>
+                <TableHead>{t.adminFlats.colFloor}</TableHead>
+                <TableHead>{t.adminFlats.colUnit}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t.adminFlats.colResidents}</TableHead>
+                <TableHead>{t.adminFlats.colRegPassword}</TableHead>
+                <TableHead>{t.adminFlats.colRegStatus}</TableHead>
+                <TableHead className="w-28">{t.adminFlats.colActions}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -316,7 +318,7 @@ export default function FlatManagementPage() {
                     colSpan={7}
                     className="py-8 text-center text-muted-foreground"
                   >
-                    沒有找到單位
+                    {t.adminFlats.noFlats}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -330,7 +332,7 @@ export default function FlatManagementPage() {
                     </TableCell>
                     <TableCell>
                       <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
-                        {flat.registration_password ?? '—'}
+                        {flat.registration_password ?? '\u2014'}
                       </code>
                     </TableCell>
                     <TableCell>
@@ -342,7 +344,7 @@ export default function FlatManagementPage() {
                             : 'bg-red-100 text-red-800 border-red-200'
                         }
                       >
-                        {flat.is_registration_open ? '開放' : '關閉'}
+                        {flat.is_registration_open ? t.common.open : t.common.closed}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -351,7 +353,7 @@ export default function FlatManagementPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          title="編輯"
+                          title={t.common.edit}
                           onClick={() => openEditDialog(flat)}
                         >
                           <HugeiconsIcon icon={PencilEdit01Icon} size={14} />
@@ -360,7 +362,7 @@ export default function FlatManagementPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          title="重設密碼"
+                          title={t.adminFlats.resetPassword}
                           onClick={() =>
                             setResetTarget({
                               id: flat.id,
@@ -374,7 +376,7 @@ export default function FlatManagementPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          title="刪除"
+                          title={t.common.delete}
                           onClick={() =>
                             setDeleteTarget({
                               id: flat.id,
@@ -428,7 +430,7 @@ export default function FlatManagementPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {formDialog?.mode === 'add' ? '新增單位' : '編輯單位'}
+              {formDialog?.mode === 'add' ? t.adminFlats.createTitle : t.adminFlats.editTitle}
             </DialogTitle>
           </DialogHeader>
 
@@ -440,7 +442,7 @@ export default function FlatManagementPage() {
             )}
 
             <div className="space-y-2">
-              <Label>座 (Block)</Label>
+              <Label>{t.adminFlats.blockLabel}</Label>
               <Input
                 value={formBlock}
                 onChange={(e) => setFormBlock(e.target.value)}
@@ -449,7 +451,7 @@ export default function FlatManagementPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>樓層 (Floor)</Label>
+              <Label>{t.adminFlats.floorLabel}</Label>
               <Input
                 value={formFloor}
                 onChange={(e) => setFormFloor(e.target.value)}
@@ -458,7 +460,7 @@ export default function FlatManagementPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>單位號碼 (Unit)</Label>
+              <Label>{t.adminFlats.unitLabel}</Label>
               <Input
                 value={formUnit}
                 onChange={(e) => setFormUnit(e.target.value)}
@@ -468,7 +470,7 @@ export default function FlatManagementPage() {
 
             {formDialog?.mode === 'edit' && (
               <div className="flex items-center justify-between">
-                <Label>開放註冊</Label>
+                <Label>{t.adminFlats.openReg}</Label>
                 <Switch
                   checked={formRegOpen}
                   onCheckedChange={setFormRegOpen}
@@ -479,7 +481,7 @@ export default function FlatManagementPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setFormDialog(null)}>
-              取消
+              {t.common.cancel}
             </Button>
             {formDialog?.mode === 'add' ? (
               <Button
@@ -491,7 +493,7 @@ export default function FlatManagementPage() {
                   !formUnit.trim()
                 }
               >
-                {createMutation.isPending ? '建立中...' : '建立'}
+                {createMutation.isPending ? t.common.creating : t.adminFlats.create}
               </Button>
             ) : (
               <Button
@@ -506,7 +508,7 @@ export default function FlatManagementPage() {
                   !formUnit.trim()
                 }
               >
-                {updateMutation.isPending ? '儲存中...' : '儲存'}
+                {updateMutation.isPending ? t.common.saving : t.common.save}
               </Button>
             )}
           </DialogFooter>
@@ -520,26 +522,26 @@ export default function FlatManagementPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>確定刪除此單位？</AlertDialogTitle>
+            <AlertDialogTitle>{t.adminFlats.deleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget && (
                 <>
-                  單位: {deleteTarget.label}
+                  {t.adminFlats.deleteUnit}: {deleteTarget.label}
                   <br />
                   {deleteTarget.residentCount > 0 && (
                     <span className="mt-2 block font-medium text-destructive">
-                      此單位有 {deleteTarget.residentCount} 位已註冊住戶，無法刪除。
+                      {t.adminFlats.deleteHasResidents(deleteTarget.residentCount)}
                     </span>
                   )}
                   {deleteTarget.residentCount === 0 && (
-                    <span className="mt-2 block">此操作無法復原。</span>
+                    <span className="mt-2 block">{t.adminFlats.deleteWarning}</span>
                   )}
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
                 deleteTarget && deleteMutation.mutate(deleteTarget.id)
@@ -550,7 +552,7 @@ export default function FlatManagementPage() {
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? '刪除中...' : '確定刪除'}
+              {deleteMutation.isPending ? t.common.deleting : t.common.confirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -563,27 +565,27 @@ export default function FlatManagementPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>確定重設此單位的註冊密碼？</AlertDialogTitle>
+            <AlertDialogTitle>{t.adminFlats.resetTitle}</AlertDialogTitle>
             <AlertDialogDescription>
               {resetTarget && (
                 <>
-                  單位: {resetTarget.label}
+                  {t.adminFlats.deleteUnit}: {resetTarget.label}
                   <br />
                   <br />
-                  重設密碼不會影響已註冊的用戶
+                  {t.adminFlats.resetHint}
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
                 resetTarget && resetMutation.mutate(resetTarget.id)
               }
               disabled={resetMutation.isPending}
             >
-              {resetMutation.isPending ? '重設中...' : '確定重設'}
+              {resetMutation.isPending ? t.adminFlats.resetting : t.adminFlats.resetConfirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -602,7 +604,7 @@ export default function FlatManagementPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {formDialog ? '單位已建立' : '密碼已重設'}
+              {formDialog ? t.adminFlats.flatCreated : t.adminFlats.passwordReset}
             </DialogTitle>
           </DialogHeader>
 
@@ -611,7 +613,7 @@ export default function FlatManagementPage() {
 
             <div>
               <Label className="mb-1 text-xs text-muted-foreground">
-                註冊密碼
+                {t.adminFlats.regPasswordLabel}
               </Label>
               <div className="flex items-center gap-2">
                 <div className="flex-1 rounded-md bg-muted px-4 py-3 font-mono text-lg tracking-widest">
@@ -628,13 +630,13 @@ export default function FlatManagementPage() {
                 </Button>
               </div>
               {copied && (
-                <p className="mt-1 text-xs text-green-600">已複製</p>
+                <p className="mt-1 text-xs text-green-600">{t.common.copiedToClipboard}</p>
               )}
             </div>
 
             <Alert>
               <AlertDescription className="text-sm">
-                請記下此密碼並交予相關業戶，用於註冊帳戶。
+                {t.adminFlats.passwordNote}
               </AlertDescription>
             </Alert>
           </div>
@@ -646,7 +648,7 @@ export default function FlatManagementPage() {
                 setCopied(false);
               }}
             >
-              完成
+              {t.adminFlats.done}
             </Button>
           </DialogFooter>
         </DialogContent>

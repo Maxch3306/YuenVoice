@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import { useAuthStore } from '@/stores/auth-store';
 import { login } from '@/services/auth';
+import { useT } from '@/lib/i18n';
 
 interface FieldErrors {
   email?: string;
@@ -33,6 +34,7 @@ function validateEmail(email: string): boolean {
 export default function LoginPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const t = useT();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,13 +47,13 @@ export default function LoginPage() {
     const errors: FieldErrors = {};
 
     if (!email.trim()) {
-      errors.email = '請輸入電郵地址';
+      errors.email = t.login.errorRequired.email;
     } else if (!validateEmail(email)) {
-      errors.email = '電郵格式不正確';
+      errors.email = t.login.errorFormat.email;
     }
 
     if (!password) {
-      errors.password = '請輸入密碼';
+      errors.password = t.login.errorRequired.password;
     }
 
     setFieldErrors(errors);
@@ -77,13 +79,11 @@ export default function LoginPage() {
       )?.response?.data?.message;
 
       if (status === 401) {
-        setServerError('電郵或密碼不正確 (Invalid email or password)');
+        setServerError(t.login.errorInvalid);
       } else if (status === 403) {
-        setServerError(
-          '此帳戶已被停用，請聯絡管理處 (Account disabled, please contact management)'
-        );
+        setServerError(t.login.errorDisabled);
       } else {
-        setServerError(message || '登入失敗，請稍後再試');
+        setServerError(message || t.login.errorGeneric);
       }
     } finally {
       setIsLoading(false);
@@ -93,7 +93,7 @@ export default function LoginPage() {
   return (
     <Card className="mx-auto w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-bold">登入</CardTitle>
+        <CardTitle className="text-2xl font-bold">{t.login.title}</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -106,12 +106,12 @@ export default function LoginPage() {
           {/* Email */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-sm font-medium">
-              電郵地址 (Email)
+              {t.login.email}
             </Label>
             <Input
               id="email"
               type="email"
-              placeholder="name@example.com"
+              placeholder={t.login.emailPlaceholder}
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
@@ -130,7 +130,7 @@ export default function LoginPage() {
           {/* Password */}
           <div className="space-y-2">
             <Label htmlFor="password" className="text-sm font-medium">
-              密碼 (Password)
+              {t.login.password}
             </Label>
             <div className="relative">
               <Input
@@ -155,7 +155,7 @@ export default function LoginPage() {
                 onClick={() => setShowPassword(!showPassword)}
                 className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
                 tabIndex={-1}
-                aria-label={showPassword ? '隱藏密碼' : '顯示密碼'}
+                aria-label={showPassword ? t.login.hidePassword : t.login.showPassword}
               >
                 <HugeiconsIcon
                   icon={showPassword ? ViewOffIcon : ViewIcon}
@@ -183,7 +183,7 @@ export default function LoginPage() {
                 className="animate-spin"
               />
             ) : (
-              '登入'
+              t.login.submit
             )}
           </Button>
 
@@ -193,7 +193,7 @@ export default function LoginPage() {
               to="/forgot-password"
               className="text-muted-foreground hover:text-primary text-sm"
             >
-              忘記密碼？
+              {t.login.forgotPassword}
             </Link>
           </div>
         </form>
@@ -201,9 +201,9 @@ export default function LoginPage() {
 
       {/* Register link */}
       <div className="pb-6 text-center text-sm">
-        還沒有帳戶？{' '}
+        {t.login.noAccount}{' '}
         <Link to="/register" className="text-primary font-medium">
-          立即註冊
+          {t.login.register}
         </Link>
       </div>
     </Card>

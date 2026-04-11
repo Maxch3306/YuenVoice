@@ -10,6 +10,8 @@ import {
 } from '@hugeicons/core-free-icons';
 
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
+import type { Translations } from '@/lib/translations';
 import { useAuthStore } from '@/stores/auth-store';
 import { useReport, useUpdateStatus, useAddComment } from '@/services/reports';
 import type { ReportStatus, ReportType, IncidentReport, IncidentComment } from '@/types';
@@ -27,24 +29,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-// ─── Status / Type labels ───────────────────────────────────────
-
-const STATUS_LABELS: Record<ReportStatus, string> = {
-  pending: '待處理',
-  in_progress: '跟進中',
-  completed: '已完成',
-};
+// ─── Status styles (language-independent) ───────────────────────
 
 const STATUS_STYLES: Record<ReportStatus, string> = {
   pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   in_progress: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   completed: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-};
-
-const TYPE_LABELS: Record<ReportType, string> = {
-  repair: '故障維修',
-  complaint: '投訴',
-  inquiry: '查詢',
 };
 
 const STATUS_ORDER: ReportStatus[] = ['pending', 'in_progress', 'completed'];
@@ -69,10 +59,10 @@ function formatDateTime(dateStr: string) {
   });
 }
 
-function buildLocation(report: IncidentReport): string {
+function buildLocation(report: IncidentReport, t: Translations): string {
   const parts: string[] = [];
-  if (report.location_block) parts.push(`${report.location_block}座`);
-  if (report.location_floor) parts.push(`${report.location_floor}樓`);
+  if (report.location_block) parts.push(`${report.location_block}${t.common.block}`);
+  if (report.location_floor) parts.push(`${report.location_floor}${t.common.floor}`);
   if (report.location_area) parts.push(report.location_area);
   return parts.join(' ') || '—';
 }
@@ -87,13 +77,19 @@ function isMgmt(role?: string) {
 
 // ─── Status Timeline ────────────────────────────────────────────
 
-function StatusTimeline({ report }: { report: IncidentReport }) {
+function StatusTimeline({ report, t }: { report: IncidentReport; t: Translations }) {
   const currentIndex = STATUS_ORDER.indexOf(report.status);
+
+  const STATUS_LABELS: Record<ReportStatus, string> = {
+    pending: t.reportStatus.pending,
+    in_progress: t.reportStatus.in_progress,
+    completed: t.reportStatus.resolved,
+  };
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">狀態進度</CardTitle>
+        <CardTitle className="text-base">{t.reportDetail.statusProgress}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-0">
@@ -143,17 +139,17 @@ function StatusTimeline({ report }: { report: IncidentReport }) {
                   </p>
                   {isActive && status === 'pending' && (
                     <p className="text-xs text-muted-foreground">
-                      {formatDateTime(report.created_at)} — 報告已提交
+                      {formatDateTime(report.created_at)} — {t.reportDetail.statusPending}
                     </p>
                   )}
                   {isActive && status === 'in_progress' && (
                     <p className="text-xs text-muted-foreground">
-                      管理處已開始跟進
+                      {t.reportDetail.statusInProgress}
                     </p>
                   )}
                   {isActive && status === 'completed' && (
                     <p className="text-xs text-muted-foreground">
-                      事件已處理完成
+                      {t.reportDetail.statusResolved}
                     </p>
                   )}
                   {!isActive && (
@@ -171,7 +167,7 @@ function StatusTimeline({ report }: { report: IncidentReport }) {
 
 // ─── Attachments Gallery ────────────────────────────────────────
 
-function AttachmentGallery({ report }: { report: IncidentReport }) {
+function AttachmentGallery({ report, t }: { report: IncidentReport; t: Translations }) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const attachments = report.attachments ?? [];
 
@@ -183,7 +179,7 @@ function AttachmentGallery({ report }: { report: IncidentReport }) {
     <>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">附件 ({attachments.length})</CardTitle>
+          <CardTitle className="text-base">{t.reportDetail.attachments} ({attachments.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-2">
@@ -199,7 +195,7 @@ function AttachmentGallery({ report }: { report: IncidentReport }) {
                   >
                     <img
                       src={src}
-                      alt="附件"
+                      alt={t.reportDetail.attachments}
                       className="h-full w-full object-cover"
                     />
                   </button>
@@ -213,7 +209,7 @@ function AttachmentGallery({ report }: { report: IncidentReport }) {
                   rel="noopener noreferrer"
                   className="flex aspect-square items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground"
                 >
-                  下載附件
+                  {t.reportDetail.downloadAttachment}
                 </a>
               );
             })}
@@ -224,11 +220,11 @@ function AttachmentGallery({ report }: { report: IncidentReport }) {
       {/* Lightbox */}
       <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
         <DialogContent className="max-w-3xl p-2">
-          <DialogTitle className="sr-only">附件預覽</DialogTitle>
+          <DialogTitle className="sr-only">{t.reportDetail.attachmentPreview}</DialogTitle>
           {lightboxSrc && (
             <img
               src={lightboxSrc}
-              alt="附件"
+              alt={t.reportDetail.attachments}
               className="max-h-[80vh] w-full object-contain"
             />
           )}
@@ -240,7 +236,7 @@ function AttachmentGallery({ report }: { report: IncidentReport }) {
 
 // ─── Comments Section ───────────────────────────────────────────
 
-function CommentsSection({ report }: { report: IncidentReport }) {
+function CommentsSection({ report, t }: { report: IncidentReport; t: Translations }) {
   const user = useAuthStore((s) => s.user);
   const addCommentMutation = useAddComment();
   const [commentText, setCommentText] = useState('');
@@ -274,16 +270,16 @@ function CommentsSection({ report }: { report: IncidentReport }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">
-          留言紀錄 ({visibleComments.length})
+          {t.reportDetail.comments} ({visibleComments.length})
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {visibleComments.length === 0 && (
-          <p className="text-sm text-muted-foreground">暫無留言</p>
+          <p className="text-sm text-muted-foreground">{t.reportDetail.noComments}</p>
         )}
 
         {visibleComments.map((comment) => (
-          <CommentCard key={comment.id} comment={comment} />
+          <CommentCard key={comment.id} comment={comment} t={t} />
         ))}
 
         <Separator />
@@ -293,7 +289,7 @@ function CommentsSection({ report }: { report: IncidentReport }) {
           <Textarea
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            placeholder="輸入留言..."
+            placeholder={t.reportDetail.commentPlaceholder}
             rows={3}
           />
           <div className="flex items-center justify-between">
@@ -307,7 +303,7 @@ function CommentsSection({ report }: { report: IncidentReport }) {
                     }
                   />
                   <HugeiconsIcon icon={LockIcon} className="size-3.5" />
-                  內部備註
+                  {t.reportDetail.internalNote}
                 </label>
               )}
             </div>
@@ -317,7 +313,7 @@ function CommentsSection({ report }: { report: IncidentReport }) {
               disabled={!commentText.trim() || addCommentMutation.isPending}
             >
               <HugeiconsIcon icon={Sent02Icon} className="size-4" />
-              {addCommentMutation.isPending ? '發送中...' : '發送'}
+              {addCommentMutation.isPending ? t.common.sending : t.common.send}
             </Button>
           </div>
         </form>
@@ -326,15 +322,15 @@ function CommentsSection({ report }: { report: IncidentReport }) {
   );
 }
 
-function CommentCard({ comment }: { comment: IncidentComment }) {
+function CommentCard({ comment, t }: { comment: IncidentComment; t: Translations }) {
   if (comment.is_internal) {
     return (
       <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/50 p-3">
         <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
           <HugeiconsIcon icon={LockIcon} className="size-3" />
-          <span className="font-medium">內部備註</span>
+          <span className="font-medium">{t.reportDetail.internalNote}</span>
           <span>&middot;</span>
-          <span>{comment.author?.name ?? '管理處職員'}</span>
+          <span>{comment.author?.name ?? t.reportDetail.mgmtStaff}</span>
           <span>&middot;</span>
           <span>{formatDateTime(comment.created_at)}</span>
         </div>
@@ -347,7 +343,7 @@ function CommentCard({ comment }: { comment: IncidentComment }) {
     <div className="rounded-md border p-3">
       <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">
-          {comment.author?.name ?? '匿名用戶'}
+          {comment.author?.name ?? t.common.anonymous}
         </span>
         <span>&middot;</span>
         <span>{formatDateTime(comment.created_at)}</span>
@@ -359,7 +355,7 @@ function CommentCard({ comment }: { comment: IncidentComment }) {
 
 // ─── Management Controls ────────────────────────────────────────
 
-function MgmtControls({ report }: { report: IncidentReport }) {
+function MgmtControls({ report, t }: { report: IncidentReport; t: Translations }) {
   const user = useAuthStore((s) => s.user);
   const updateStatusMutation = useUpdateStatus();
 
@@ -368,7 +364,7 @@ function MgmtControls({ report }: { report: IncidentReport }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">管理操作</CardTitle>
+        <CardTitle className="text-base">{t.reportDetail.mgmtActions}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex gap-2">
@@ -383,7 +379,7 @@ function MgmtControls({ report }: { report: IncidentReport }) {
               }
               disabled={updateStatusMutation.isPending}
             >
-              開始跟進
+              {t.reportDetail.startProgress}
             </Button>
           )}
           {(report.status === 'pending' || report.status === 'in_progress') && (
@@ -397,11 +393,11 @@ function MgmtControls({ report }: { report: IncidentReport }) {
               }
               disabled={updateStatusMutation.isPending}
             >
-              標記完成
+              {t.reportDetail.markResolved}
             </Button>
           )}
           {report.status === 'completed' && (
-            <p className="text-sm text-muted-foreground">此報告已處理完成。</p>
+            <p className="text-sm text-muted-foreground">{t.reportDetail.resolvedMessage}</p>
           )}
         </div>
       </CardContent>
@@ -414,7 +410,20 @@ function MgmtControls({ report }: { report: IncidentReport }) {
 export default function ReportDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const t = useT();
   const { data: report, isLoading, isError } = useReport(id!);
+
+  const TYPE_LABELS: Record<ReportType, string> = {
+    repair: t.reportType.maintenance,
+    complaint: t.reportType.complaint,
+    inquiry: t.reportType.inquiry,
+  };
+
+  const STATUS_LABELS: Record<ReportStatus, string> = {
+    pending: t.reportStatus.pending,
+    in_progress: t.reportStatus.in_progress,
+    completed: t.reportStatus.resolved,
+  };
 
   if (isLoading) {
     return (
@@ -437,10 +446,10 @@ export default function ReportDetailPage() {
           <Button variant="ghost" size="icon" onClick={() => navigate('/reports')}>
             <HugeiconsIcon icon={ArrowLeft01Icon} className="size-5" />
           </Button>
-          <h1 className="text-xl font-bold">報告詳情</h1>
+          <h1 className="text-xl font-bold">{t.reportDetail.title}</h1>
         </div>
         <div className="py-12 text-center text-muted-foreground">
-          無法載入報告，請重試。
+          {t.reportDetail.loadError}
         </div>
       </div>
     );
@@ -452,9 +461,9 @@ export default function ReportDetailPage() {
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate('/reports')}>
           <HugeiconsIcon icon={ArrowLeft01Icon} className="size-5" />
-          <span className="sr-only">返回</span>
+          <span className="sr-only">{t.common.back}</span>
         </Button>
-        <h1 className="text-xl font-bold">報告詳情</h1>
+        <h1 className="text-xl font-bold">{t.reportDetail.title}</h1>
       </div>
 
       {/* Report header card */}
@@ -472,23 +481,23 @@ export default function ReportDetailPage() {
           <div className="flex flex-col gap-1 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <HugeiconsIcon icon={Calendar01Icon} className="size-3.5" />
-              {formatDate(report.created_at)} 提交
+              {formatDate(report.created_at)} {t.reports.submitted}
             </span>
             <span className="flex items-center gap-1">
               <HugeiconsIcon icon={Location01Icon} className="size-3.5" />
-              {buildLocation(report)}
+              {buildLocation(report, t)}
             </span>
           </div>
         </CardContent>
       </Card>
 
       {/* Status timeline */}
-      <StatusTimeline report={report} />
+      <StatusTimeline report={report} t={t} />
 
       {/* Description */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">詳細描述</CardTitle>
+          <CardTitle className="text-base">{t.reportDetail.description}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">
@@ -498,13 +507,13 @@ export default function ReportDetailPage() {
       </Card>
 
       {/* Attachments */}
-      <AttachmentGallery report={report} />
+      <AttachmentGallery report={report} t={t} />
 
       {/* Management controls */}
-      <MgmtControls report={report} />
+      <MgmtControls report={report} t={t} />
 
       {/* Comments */}
-      <CommentsSection report={report} />
+      <CommentsSection report={report} t={t} />
     </div>
   );
 }

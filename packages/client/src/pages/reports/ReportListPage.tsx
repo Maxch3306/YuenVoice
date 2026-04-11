@@ -4,6 +4,8 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { Add01Icon, Location01Icon, Calendar01Icon } from '@hugeicons/core-free-icons';
 
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
+import type { Translations } from '@/lib/translations';
 import { useReports, type ReportFilters } from '@/services/reports';
 import type { ReportStatus, ReportType, IncidentReport } from '@/types';
 
@@ -20,32 +22,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// ─── Status / Type mapping ──────────────────────────────────────
-
-const STATUS_LABELS: Record<ReportStatus, string> = {
-  pending: '待處理',
-  in_progress: '跟進中',
-  completed: '已完成',
-};
+// ─── Status styles (language-independent) ──────────────────────
 
 const STATUS_STYLES: Record<ReportStatus, string> = {
   pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   in_progress: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   completed: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
 };
-
-const TYPE_LABELS: Record<ReportType, string> = {
-  repair: '故障維修',
-  complaint: '投訴',
-  inquiry: '查詢',
-};
-
-const STATUS_TABS: Array<{ value: string; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'pending', label: '待處理' },
-  { value: 'in_progress', label: '跟進中' },
-  { value: 'completed', label: '已完成' },
-];
 
 // ─── Helper ─────────────────────────────────────────────────────
 
@@ -57,10 +40,10 @@ function formatDate(dateStr: string) {
   });
 }
 
-function buildLocation(report: IncidentReport): string {
+function buildLocation(report: IncidentReport, t: Translations): string {
   const parts: string[] = [];
-  if (report.location_block) parts.push(`${report.location_block}座`);
-  if (report.location_floor) parts.push(`${report.location_floor}樓`);
+  if (report.location_block) parts.push(`${report.location_block}${t.common.block}`);
+  if (report.location_floor) parts.push(`${report.location_floor}${t.common.floor}`);
   if (report.location_area) parts.push(report.location_area);
   return parts.join(' ') || '—';
 }
@@ -69,6 +52,26 @@ function buildLocation(report: IncidentReport): string {
 
 export default function ReportListPage() {
   const navigate = useNavigate();
+  const t = useT();
+
+  const STATUS_LABELS: Record<ReportStatus, string> = {
+    pending: t.reportStatus.pending,
+    in_progress: t.reportStatus.in_progress,
+    completed: t.reportStatus.resolved,
+  };
+
+  const TYPE_LABELS: Record<ReportType, string> = {
+    repair: t.reportType.maintenance,
+    complaint: t.reportType.complaint,
+    inquiry: t.reportType.inquiry,
+  };
+
+  const STATUS_TABS: Array<{ value: string; label: string }> = [
+    { value: 'all', label: t.common.all },
+    { value: 'pending', label: t.reportStatus.pending },
+    { value: 'in_progress', label: t.reportStatus.in_progress },
+    { value: 'completed', label: t.reportStatus.resolved },
+  ];
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -101,7 +104,7 @@ export default function ReportListPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4 pb-24">
       {/* Page title */}
-      <h1 className="text-2xl font-bold">事件報告</h1>
+      <h1 className="text-2xl font-bold">{t.reports.title}</h1>
 
       {/* Status filter tabs */}
       <Tabs value={statusFilter} onValueChange={handleStatusChange}>
@@ -118,13 +121,13 @@ export default function ReportListPage() {
       <div className="flex gap-2">
         <Select value={typeFilter} onValueChange={handleTypeChange}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="所有類型" />
+            <SelectValue placeholder={t.reports.allTypes} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">所有類型</SelectItem>
-            <SelectItem value="repair">故障維修</SelectItem>
-            <SelectItem value="complaint">投訴</SelectItem>
-            <SelectItem value="inquiry">查詢</SelectItem>
+            <SelectItem value="all">{t.reports.allTypes}</SelectItem>
+            <SelectItem value="repair">{t.reportType.maintenance}</SelectItem>
+            <SelectItem value="complaint">{t.reportType.complaint}</SelectItem>
+            <SelectItem value="inquiry">{t.reportType.inquiry}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -150,16 +153,16 @@ export default function ReportListPage() {
       {/* Error state */}
       {isError && (
         <div className="py-12 text-center text-muted-foreground">
-          載入失敗，請重試。
+          {t.reports.loadError}
         </div>
       )}
 
       {/* Empty state */}
       {!isLoading && !isError && reports.length === 0 && (
         <div className="py-16 text-center">
-          <p className="text-lg text-muted-foreground">暫無事件報告</p>
+          <p className="text-lg text-muted-foreground">{t.reports.empty}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            點擊右下角按鈕提交新報告
+            {t.reports.emptyHint}
           </p>
         </div>
       )}
@@ -185,7 +188,7 @@ export default function ReportListPage() {
                   <div className="flex flex-col gap-1">
                     <span className="flex items-center gap-1">
                       <HugeiconsIcon icon={Location01Icon} className="size-3.5" />
-                      {buildLocation(report)}
+                      {buildLocation(report, t)}
                     </span>
                     <span className="flex items-center gap-1">
                       <HugeiconsIcon icon={Calendar01Icon} className="size-3.5" />
@@ -262,7 +265,7 @@ export default function ReportListPage() {
         onClick={() => navigate('/reports/new')}
       >
         <HugeiconsIcon icon={Add01Icon} className="size-6" />
-        <span className="sr-only">提交新報告</span>
+        <span className="sr-only">{t.reports.newReport}</span>
       </Button>
     </div>
   );

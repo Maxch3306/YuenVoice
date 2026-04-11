@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useCreatePost } from '@/services/discussions';
+import { useT } from '@/lib/i18n';
 
 const MAX_TITLE = 200;
 const MAX_BODY = 10000;
@@ -21,6 +22,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export default function CreatePostPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
+  const t = useT();
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -40,11 +42,11 @@ export default function CreatePostPage() {
     for (const file of Array.from(incoming)) {
       if (files.length + newFiles.length >= MAX_FILES) break;
       if (file.size > MAX_FILE_SIZE) {
-        setError(`${file.name} 超過 10MB 限制`);
+        setError(t.createPost.fileTooLarge(file.name));
         continue;
       }
       if (!file.type.startsWith('image/')) {
-        setError(`${file.name} 不是圖片檔案`);
+        setError(t.createPost.fileNotImage(file.name));
         continue;
       }
       newFiles.push(file);
@@ -66,11 +68,11 @@ export default function CreatePostPage() {
     setError('');
 
     if (!title.trim()) {
-      setError('請輸入標題');
+      setError(t.createPost.titleRequired);
       return;
     }
     if (!body.trim()) {
-      setError('請輸入內容');
+      setError(t.createPost.bodyRequired);
       return;
     }
 
@@ -84,7 +86,7 @@ export default function CreatePostPage() {
       const post = await createPost.mutateAsync(formData);
       navigate(`/discussion/post/${post.id}`, { replace: true });
     } catch {
-      setError('發佈失敗，請稍後再試。');
+      setError(t.createPost.submitError);
     }
   }
 
@@ -96,20 +98,20 @@ export default function CreatePostPage() {
           variant="ghost"
           size="icon-sm"
           onClick={() => navigate(-1)}
-          aria-label="返回"
+          aria-label={t.common.back}
         >
           <HugeiconsIcon icon={ArrowLeft01Icon} size={20} />
         </Button>
-        <h1 className="text-xl font-bold">發佈新帖文</h1>
+        <h1 className="text-xl font-bold">{t.createPost.title}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {/* Title */}
         <div className="flex flex-col gap-2">
-          <Label htmlFor="post-title">標題</Label>
+          <Label htmlFor="post-title">{t.createPost.fieldTitle}</Label>
           <Input
             id="post-title"
-            placeholder="輸入帖文標題"
+            placeholder={t.createPost.titlePlaceholder}
             maxLength={MAX_TITLE}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -121,10 +123,10 @@ export default function CreatePostPage() {
 
         {/* Body */}
         <div className="flex flex-col gap-2">
-          <Label htmlFor="post-body">內容</Label>
+          <Label htmlFor="post-body">{t.createPost.body}</Label>
           <Textarea
             id="post-body"
-            placeholder="輸入帖文內容"
+            placeholder={t.createPost.bodyPlaceholder}
             maxLength={MAX_BODY}
             rows={8}
             value={body}
@@ -138,7 +140,7 @@ export default function CreatePostPage() {
 
         {/* Photo Upload */}
         <div className="flex flex-col gap-2">
-          <Label>圖片</Label>
+          <Label>{t.createPost.images}</Label>
           <input
             ref={fileInputRef}
             type="file"
@@ -157,9 +159,9 @@ export default function CreatePostPage() {
             disabled={files.length >= MAX_FILES}
           >
             <HugeiconsIcon icon={Image01Icon} size={28} />
-            <span className="text-sm">點擊或拖曳上載圖片</span>
+            <span className="text-sm">{t.createPost.imagesHint}</span>
             <span className="text-xs">
-              最多{MAX_FILES}張，每張不超過10MB
+              {t.createPost.imagesLimit(MAX_FILES)}
             </span>
           </button>
 
@@ -170,14 +172,14 @@ export default function CreatePostPage() {
                 <div key={i} className="group relative">
                   <img
                     src={src}
-                    alt={`上載圖片 ${i + 1}`}
+                    alt={t.createPost.imageLabel(i + 1)}
                     className="h-20 w-20 rounded-md object-cover"
                   />
                   <button
                     type="button"
                     onClick={() => removeFile(i)}
                     className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow"
-                    aria-label="移除圖片"
+                    aria-label={t.createPost.removeImage}
                   >
                     <HugeiconsIcon icon={Cancel01Icon} size={12} />
                   </button>
@@ -191,7 +193,7 @@ export default function CreatePostPage() {
         <div className="flex flex-col gap-2 rounded-xl border border-border p-4">
           <div className="flex items-center justify-between">
             <Label htmlFor="anon-switch" className="cursor-pointer">
-              匿名發佈
+              {t.createPost.anonymousLabel}
             </Label>
             <Switch
               id="anon-switch"
@@ -200,7 +202,7 @@ export default function CreatePostPage() {
             />
           </div>
           <p className="text-sm text-muted-foreground">
-            你的身份將不會顯示給其他業戶
+            {t.createPost.anonymousHint}
           </p>
         </div>
 
@@ -215,7 +217,7 @@ export default function CreatePostPage() {
           className="h-11 w-full"
           disabled={createPost.isPending}
         >
-          {createPost.isPending ? '發佈中...' : '發佈帖文'}
+          {createPost.isPending ? t.createPost.publishing : t.createPost.submit}
         </Button>
       </form>
     </div>

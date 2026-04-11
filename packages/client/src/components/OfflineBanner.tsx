@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useT } from '@/lib/i18n';
 
 export default function OfflineBanner() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const t = useT();
 
   useEffect(() => {
     const goOffline = () => setIsOffline(true);
@@ -23,7 +25,7 @@ export default function OfflineBanner() {
       role="alert"
       className="bg-destructive px-4 py-2 text-center text-sm font-medium text-destructive-foreground"
     >
-      你目前離線 — 部分功能可能無法使用
+      {t.offline.message}
     </div>
   );
 }

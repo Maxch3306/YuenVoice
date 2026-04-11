@@ -6,6 +6,7 @@ import { File01Icon, Upload01Icon, ArrowLeft01Icon, ArrowRight01Icon } from '@hu
 
 import { getDocuments, uploadDocument } from '@/services/oc';
 import { useAuthStore } from '@/stores/auth-store';
+import { useT } from '@/lib/i18n';
 import type { OcDocumentType } from '@/types';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,21 +23,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 const currentYear = new Date().getFullYear();
 const yearTabs = [currentYear, currentYear - 1, currentYear - 2, 'older'] as const;
 
-const typeOptions: { value: string; label: string }[] = [
-  { value: '', label: '所有類型' },
-  { value: 'meeting_minutes', label: '會議記錄' },
-  { value: 'financial_statement', label: '財務報表' },
-  { value: 'resolution', label: '決議公告' },
-  { value: 'notice', label: '一般通知' },
-];
-
-const typeLabelMap: Record<OcDocumentType, string> = {
-  meeting_minutes: '會議記錄',
-  financial_statement: '財務報表',
-  resolution: '決議公告',
-  notice: '一般通知',
-};
-
 const typeColorMap: Record<OcDocumentType, string> = {
   meeting_minutes: 'bg-blue-100 text-blue-800 border-blue-200',
   financial_statement: 'bg-green-100 text-green-800 border-green-200',
@@ -49,6 +35,22 @@ export default function DocumentListPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const canUpload = user?.role === 'oc_committee' || user?.role === 'admin';
+  const t = useT();
+
+  const typeLabelMap: Record<OcDocumentType, string> = {
+    meeting_minutes: t.docType.meeting_minutes,
+    financial_statement: t.docType.financial_statement,
+    resolution: t.docType.resolution,
+    notice: t.docType.notice,
+  };
+
+  const typeOptions: { value: string; label: string }[] = [
+    { value: '', label: t.ocDocs.allTypes },
+    { value: 'meeting_minutes', label: t.docType.meeting_minutes },
+    { value: 'financial_statement', label: t.docType.financial_statement },
+    { value: 'resolution', label: t.docType.resolution },
+    { value: 'notice', label: t.docType.notice },
+  ];
 
   const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
   const [typeFilter, setTypeFilter] = useState('');
@@ -119,7 +121,7 @@ export default function DocumentListPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4">
-      <h1 className="mb-6 text-2xl font-bold">法團文件</h1>
+      <h1 className="mb-6 text-2xl font-bold">{t.ocDocs.title}</h1>
 
       {/* Year Tabs */}
       <Tabs
@@ -133,7 +135,7 @@ export default function DocumentListPage() {
         <TabsList className="w-full">
           {yearTabs.map((y) => (
             <TabsTrigger key={y} value={String(y)} className="flex-1">
-              {y === 'older' ? '更早' : y}
+              {y === 'older' ? t.ocDocs.earlier : y}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -149,7 +151,7 @@ export default function DocumentListPage() {
           }}
         >
           <SelectTrigger className="w-full sm:w-56">
-            <SelectValue placeholder="所有類型" />
+            <SelectValue placeholder={t.ocDocs.allTypes} />
           </SelectTrigger>
           <SelectContent>
             {typeOptions.map((opt) => (
@@ -171,7 +173,7 @@ export default function DocumentListPage() {
       ) : documents.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
           <HugeiconsIcon icon={File01Icon} size={48} className="opacity-40" />
-          <p className="text-sm">暫無文件</p>
+          <p className="text-sm">{t.ocDocs.empty}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -238,7 +240,7 @@ export default function DocumentListPage() {
           onClick={() => setUploadOpen(true)}
         >
           <HugeiconsIcon icon={Upload01Icon} size={18} />
-          <span className="ml-2">上載文件</span>
+          <span className="ml-2">{t.ocDocs.upload}</span>
         </Button>
       )}
 
@@ -252,40 +254,40 @@ export default function DocumentListPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>上載法團文件</DialogTitle>
+            <DialogTitle>{t.ocDocs.uploadTitle}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="doc-title">文件標題</Label>
+              <Label htmlFor="doc-title">{t.ocDocs.docTitle}</Label>
               <Input
                 id="doc-title"
                 value={uploadTitle}
                 onChange={(e) => setUploadTitle(e.target.value)}
-                placeholder="輸入文件標題"
+                placeholder={t.ocDocs.docTitlePlaceholder}
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>文件類型</Label>
+              <Label>{t.ocDocs.docType}</Label>
               <Select
                 value={uploadType}
                 onValueChange={(v) => setUploadType(v as OcDocumentType)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="選擇類型" />
+                  <SelectValue placeholder={t.ocDocs.docTypePlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="meeting_minutes">會議記錄</SelectItem>
-                  <SelectItem value="financial_statement">財務報表</SelectItem>
-                  <SelectItem value="resolution">決議公告</SelectItem>
-                  <SelectItem value="notice">一般通知</SelectItem>
+                  <SelectItem value="meeting_minutes">{t.docType.meeting_minutes}</SelectItem>
+                  <SelectItem value="financial_statement">{t.docType.financial_statement}</SelectItem>
+                  <SelectItem value="resolution">{t.docType.resolution}</SelectItem>
+                  <SelectItem value="notice">{t.docType.notice}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label>年份</Label>
+              <Label>{t.ocDocs.year}</Label>
               <Select value={uploadYear} onValueChange={setUploadYear}>
                 <SelectTrigger>
                   <SelectValue />
@@ -303,18 +305,18 @@ export default function DocumentListPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="doc-desc">描述（選填）</Label>
+              <Label htmlFor="doc-desc">{t.ocDocs.description}</Label>
               <Textarea
                 id="doc-desc"
                 value={uploadDescription}
                 onChange={(e) => setUploadDescription(e.target.value)}
-                placeholder="輸入文件描述"
+                placeholder={t.ocDocs.descriptionPlaceholder}
                 rows={3}
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>文件</Label>
+              <Label>{t.ocDocs.file}</Label>
               <div
                 className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-6 text-center transition-colors hover:border-primary/50 hover:bg-accent/30"
                 onClick={() => fileInputRef.current?.click()}
@@ -325,10 +327,10 @@ export default function DocumentListPage() {
                   className="mb-2 text-muted-foreground"
                 />
                 <p className="text-sm text-muted-foreground">
-                  點擊選擇檔案
+                  {t.ocDocs.filePlaceholder}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  支援 PDF、圖片、DOC 格式
+                  {t.ocDocs.fileHint}
                 </p>
               </div>
               <input
@@ -340,7 +342,7 @@ export default function DocumentListPage() {
               />
               {uploadFile && (
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  📄 {uploadFile.name}{' '}
+                  {uploadFile.name}{' '}
                   {(uploadFile.size / (1024 * 1024)).toFixed(1)}MB
                 </p>
               )}
@@ -349,7 +351,7 @@ export default function DocumentListPage() {
 
           <DialogFooter className="gap-2 sm:gap-0">
             <DialogClose asChild>
-              <Button variant="outline">取消</Button>
+              <Button variant="outline">{t.common.cancel}</Button>
             </DialogClose>
             <Button
               onClick={handleUpload}
@@ -357,7 +359,7 @@ export default function DocumentListPage() {
                 !uploadTitle || !uploadType || !uploadFile || uploadMutation.isPending
               }
             >
-              {uploadMutation.isPending ? '上載中...' : '上載'}
+              {uploadMutation.isPending ? t.common.uploading : t.ocDocs.upload}
             </Button>
           </DialogFooter>
         </DialogContent>

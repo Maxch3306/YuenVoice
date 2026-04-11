@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useT } from '@/lib/i18n';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -10,6 +11,7 @@ const DISMISSED_KEY = 'yuenvoice-install-dismissed';
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     // Don't show if user previously dismissed
@@ -45,20 +47,20 @@ export default function InstallPrompt() {
 
   return (
     <div className="flex items-center justify-between gap-2 bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-      <span>安裝 YUENVOICE 到主畫面</span>
+      <span>{t.install.banner}</span>
       <div className="flex gap-2">
         <button
           type="button"
           onClick={handleInstall}
           className="rounded-md bg-primary-foreground/20 px-3 py-1 text-xs font-medium transition-colors hover:bg-primary-foreground/30"
         >
-          安裝 / Install
+          {t.install.button}
         </button>
         <button
           type="button"
           onClick={handleDismiss}
           className="rounded-md px-3 py-1 text-xs font-medium transition-colors hover:bg-primary-foreground/20"
-          aria-label="關閉"
+          aria-label={t.common.close}
         >
           ✕
         </button>

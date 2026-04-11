@@ -10,21 +10,28 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 import { useNotificationStore } from '@/stores/notification-store';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import UserMenu from '@/components/UserMenu';
 import OfflineBanner from '@/components/OfflineBanner';
 import InstallPrompt from '@/components/InstallPrompt';
 
-const navItems = [
-  { to: '/reports', label: '報告', icon: ClipboardIcon },
-  { to: '/discussion', label: '討論', icon: BubbleChatIcon },
-  { to: '/oc', label: '法團', icon: File01Icon },
-  { to: '/notifications', label: '通知', icon: Notification01Icon },
-] as const;
+const navIcons = [
+  { to: '/reports', icon: ClipboardIcon, key: 'reports' as const },
+  { to: '/discussion', icon: BubbleChatIcon, key: 'discussion' as const },
+  { to: '/oc', icon: File01Icon, key: 'oc' as const },
+  { to: '/notifications', icon: Notification01Icon, key: 'notifications' as const },
+];
 
 export default function MainLayout() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const t = useT();
+
+  const navItems = navIcons.map((item) => ({
+    ...item,
+    label: t.nav[item.key],
+  }));
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -43,7 +50,7 @@ export default function MainLayout() {
             type="button"
             onClick={() => navigate('/notifications')}
             className="relative inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
-            aria-label="通知"
+            aria-label={t.nav.notifications}
           >
             <HugeiconsIcon icon={Notification01Icon} size={24} />
             {unreadCount > 0 && (
@@ -98,7 +105,7 @@ export default function MainLayout() {
                 }
               >
                 <HugeiconsIcon icon={Settings01Icon} size={20} />
-                <span>管理後台</span>
+                <span>{t.nav.admin}</span>
               </NavLink>
             )}
           </nav>
