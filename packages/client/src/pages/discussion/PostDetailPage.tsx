@@ -233,7 +233,6 @@ function AddCommentForm({ postId }: { postId: string }) {
         <div className="flex items-center gap-2">
           <Switch
             id="comment-anon"
-            size="sm"
             checked={isAnonymous}
             onCheckedChange={setIsAnonymous}
           />

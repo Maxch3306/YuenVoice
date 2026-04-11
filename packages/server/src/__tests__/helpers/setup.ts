@@ -1,6 +1,6 @@
 import { beforeAll, afterAll } from 'vitest'
 import { buildApp } from '../../app.js'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, InjectOptions } from 'fastify'
 
 let _app: FastifyInstance | null = null
 
@@ -50,12 +50,11 @@ export function injectWithToken(
   app: FastifyInstance,
   token: string
 ) {
-  return (opts: Parameters<FastifyInstance['inject']>[0]) => {
-    const options = typeof opts === 'string' ? { url: opts } : { ...opts }
+  return (opts: InjectOptions) => {
     return app.inject({
-      ...options,
+      ...opts,
       headers: {
-        ...((options as any).headers || {}),
+        ...(opts.headers || {}),
         authorization: `Bearer ${token}`,
       },
     })
