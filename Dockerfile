@@ -1,4 +1,6 @@
 FROM node:20-alpine AS base
+LABEL org.opencontainers.image.source="https://github.com/TSUININGGARDEN/YuenVoice"
+LABEL org.opencontainers.image.license="MIT"
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
