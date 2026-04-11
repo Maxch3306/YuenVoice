@@ -148,7 +148,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
     '/logout',
     { preHandler: [fastify.authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      await authService.logout(fastify, request.user.id)
+      const refreshToken = request.cookies[REFRESH_COOKIE_NAME]
+      await authService.logout(fastify, request.user.id, refreshToken)
       clearRefreshCookie(reply)
       return reply.send({ message: 'Logged out' })
     }

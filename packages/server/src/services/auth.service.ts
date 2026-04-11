@@ -27,19 +27,23 @@ function toSafeUser(user: User): SafeUser {
   }
 }
 
-function generateTokens(user: User): AuthTokens {
-  const payload = { id: user.id, email: user.email, role: user.role, flatId: user.flat_id }
+function generateTokens(user: User): AuthTokens & { sessionId: string } {
+  const sessionId = crypto.randomUUID()
+  const payload = { id: user.id, email: user.email, role: user.role, flatId: user.flat_id, sid: sessionId }
 
   const accessToken = jwt.sign(payload, config.jwtAccessSecret, { expiresIn: '15m' })
   const refreshToken = jwt.sign(payload, config.jwtRefreshSecret, { expiresIn: '7d' })
 
-  return { accessToken, refreshToken }
+  return { accessToken, refreshToken, sessionId }
 }
 
-async function storeRefreshToken(fastify: FastifyInstance, userId: string, refreshToken: string): Promise<void> {
+const SESSION_TTL = 7 * 24 * 60 * 60 // 7 days
+
+async function storeRefreshToken(fastify: FastifyInstance, userId: string, sessionId: string, refreshToken: string): Promise<void> {
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
-  // Store with 7-day TTL (matching refresh token expiry)
-  await fastify.redis.set(`session:refresh:${userId}`, tokenHash, 'EX', 7 * 24 * 60 * 60)
+  const key = `session:refresh:${userId}`
+  await fastify.redis.hset(key, sessionId, tokenHash)
+  await fastify.redis.expire(key, SESSION_TTL)
 }
 
 export async function register(
@@ -102,8 +106,8 @@ export async function register(
   })
 
   // Generate tokens
-  const { accessToken, refreshToken } = generateTokens(user)
-  await storeRefreshToken(fastify, user.id, refreshToken)
+  const { accessToken, refreshToken, sessionId } = generateTokens(user)
+  await storeRefreshToken(fastify, user.id, sessionId, refreshToken)
 
   return { user: toSafeUser(user), accessToken, refreshToken }
 }
@@ -132,8 +136,8 @@ export async function login(
     throw err
   }
 
-  const { accessToken, refreshToken } = generateTokens(user)
-  await storeRefreshToken(fastify, user.id, refreshToken)
+  const { accessToken, refreshToken, sessionId } = generateTokens(user)
+  await storeRefreshToken(fastify, user.id, sessionId, refreshToken)
 
   return { user: toSafeUser(user), accessToken, refreshToken }
 }
@@ -142,7 +146,6 @@ export async function refresh(
   fastify: FastifyInstance,
   refreshToken: string
 ): Promise<{ user: SafeUser; accessToken: string; refreshToken: string }> {
-  // Verify refresh token
   let decoded: jwt.JwtPayload
   try {
     decoded = jwt.verify(refreshToken, config.jwtRefreshSecret) as jwt.JwtPayload
@@ -153,9 +156,16 @@ export async function refresh(
   }
 
   const userId = decoded.id as string
+  const sessionId = decoded.sid as string
 
-  // Verify against stored hash in Redis
-  const storedHash = await fastify.redis.get(`session:refresh:${userId}`)
+  if (!sessionId) {
+    const err = new Error('Invalid refresh token')
+    ;(err as any).statusCode = 401
+    throw err
+  }
+
+  const key = `session:refresh:${userId}`
+  const storedHash = await fastify.redis.hget(key, sessionId)
   if (!storedHash) {
     const err = new Error('Session expired')
     ;(err as any).statusCode = 401
@@ -164,30 +174,40 @@ export async function refresh(
 
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
   if (tokenHash !== storedHash) {
-    // Token mismatch — possible token reuse attack; invalidate session
-    await fastify.redis.del(`session:refresh:${userId}`)
+    await fastify.redis.hdel(key, sessionId)
     const err = new Error('Invalid refresh token')
     ;(err as any).statusCode = 401
     throw err
   }
 
-  // Fetch user to get latest data for new token
   const user = await User.findByPk(userId)
   if (!user || !user.is_active) {
-    await fastify.redis.del(`session:refresh:${userId}`)
+    await fastify.redis.hdel(key, sessionId)
     const err = new Error('User not found or deactivated')
     ;(err as any).statusCode = 401
     throw err
   }
 
-  // Rotate tokens
-  const tokens = generateTokens(user)
-  await storeRefreshToken(fastify, userId, tokens.refreshToken)
+  // Rotate: remove old session, create new one
+  await fastify.redis.hdel(key, sessionId)
+  const { accessToken: newAccess, refreshToken: newRefresh, sessionId: newSid } = generateTokens(user)
+  await storeRefreshToken(fastify, userId, newSid, newRefresh)
 
-  return { user: toSafeUser(user), ...tokens }
+  return { user: toSafeUser(user), accessToken: newAccess, refreshToken: newRefresh }
 }
 
-export async function logout(fastify: FastifyInstance, userId: string): Promise<void> {
+export async function logout(fastify: FastifyInstance, userId: string, refreshToken?: string): Promise<void> {
+  if (refreshToken) {
+    try {
+      const decoded = jwt.verify(refreshToken, config.jwtRefreshSecret) as jwt.JwtPayload
+      if (decoded.sid) {
+        await fastify.redis.hdel(`session:refresh:${userId}`, decoded.sid)
+        return
+      }
+    } catch {
+      // Token invalid — fall through to delete all sessions
+    }
+  }
   await fastify.redis.del(`session:refresh:${userId}`)
 }
 
