@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   DashboardSquare01Icon,
@@ -7,12 +7,12 @@ import {
   Audit01Icon,
   ArrowLeft01Icon,
   Notification01Icon,
-  UserCircleIcon,
 } from '@hugeicons/core-free-icons';
-import { useAuthStore } from '@/stores/auth-store';
 import { useNotificationStore } from '@/stores/notification-store';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import UserMenu from '@/components/UserMenu';
 
 const adminNavItems = [
   { to: '/admin', label: '儀表板', icon: DashboardSquare01Icon, end: true },
@@ -23,14 +23,8 @@ const adminNavItems = [
 
 export default function AdminLayout() {
   const navigate = useNavigate();
-  const logout = useAuthStore((s) => s.logout);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  function handleLogout() {
-    logout();
-    navigate('/login');
-  }
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -72,14 +66,7 @@ export default function AdminLayout() {
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
-            aria-label="用戶選單"
-          >
-            <HugeiconsIcon icon={UserCircleIcon} size={24} />
-          </button>
+          <UserMenu />
         </div>
       </header>
 
