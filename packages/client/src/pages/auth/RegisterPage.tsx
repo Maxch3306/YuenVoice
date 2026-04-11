@@ -588,13 +588,6 @@ export default function RegisterPage() {
 
   // ─── Handlers ─────────────────────────────────────────────────
 
-  function handleStep1Change(field: keyof Step1Data, value: string) {
-    setStep1((prev) => ({ ...prev, [field]: value }));
-    if (fieldErrors[field]) {
-      setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
-    }
-  }
-
   function handleStep3Change(field: keyof Step3Data, value: string) {
     setStep3((prev) => ({ ...prev, [field]: value }));
     if (fieldErrors[field]) {
