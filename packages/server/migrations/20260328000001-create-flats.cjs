@@ -22,7 +22,7 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false,
       },
-      registration_password_hash: {
+      registration_password: {
         type: Sequelize.STRING,
         allowNull: false,
       },

@@ -10,15 +10,18 @@ import {
   Add01Icon,
   PencilEdit01Icon,
   Delete01Icon,
+  Download01Icon,
 } from '@hugeicons/core-free-icons';
 
 import {
   getFlats,
+  getFlatBlocks,
   createFlat,
   updateFlat,
   deleteFlat,
   resetFlatPassword,
 } from '@/services/admin';
+import api from '@/lib/api';
 import type { Flat } from '@/types';
 
 import { Input } from '@/components/ui/input';
@@ -61,13 +64,16 @@ import {
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-const blockOptions = ['A', 'B', 'C', 'D', 'E'];
-
 export default function FlatManagementPage() {
   const queryClient = useQueryClient();
   const [blockFilter, setBlockFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+
+  const { data: blockOptions = [] } = useQuery({
+    queryKey: ['admin', 'flats', 'blocks'],
+    queryFn: getFlatBlocks,
+  });
 
   // Reset password state
   const [resetTarget, setResetTarget] = useState<{
@@ -109,8 +115,9 @@ export default function FlatManagementPage() {
       }),
   });
 
-  const invalidateFlats = () =>
+  const invalidateFlats = () => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'flats'] });
+  };
 
   // ── Mutations ──
 
@@ -205,6 +212,23 @@ export default function FlatManagementPage() {
     }
   }
 
+  async function handleExportCSV() {
+    const params: Record<string, string> = {};
+    if (blockFilter) params.block = blockFilter;
+
+    const { data } = await api.get('/api/admin/flats/export-csv', {
+      params,
+      responseType: 'blob',
+    });
+
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `flats-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const flats = data?.data ?? [];
   const meta = data?.meta;
   const totalPages = meta?.totalPages ?? 1;
@@ -213,10 +237,16 @@ export default function FlatManagementPage() {
     <div className="p-4 lg:p-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">單位管理</h1>
-        <Button size="sm" onClick={openAddDialog}>
-          <HugeiconsIcon icon={Add01Icon} size={16} />
-          <span className="ml-1">新增單位</span>
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={handleExportCSV}>
+            <HugeiconsIcon icon={Download01Icon} size={16} />
+            <span className="ml-1">匯出 CSV</span>
+          </Button>
+          <Button size="sm" onClick={openAddDialog}>
+            <HugeiconsIcon icon={Add01Icon} size={16} />
+            <span className="ml-1">新增單位</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

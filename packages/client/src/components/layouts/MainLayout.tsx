@@ -8,9 +8,12 @@ import {
   UserCircleIcon,
   Settings01Icon,
   Logout01Icon,
+  Sun01Icon,
+  Moon01Icon,
 } from '@hugeicons/core-free-icons';
 import { useAuthStore } from '@/stores/auth-store';
 import { useNotificationStore } from '@/stores/notification-store';
+import { useTheme } from '@/components/theme-provider';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -35,6 +38,13 @@ export default function MainLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const { theme, setTheme } = useTheme();
+
+  const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  function handleToggleTheme() {
+    setTheme(isDark ? 'light' : 'dark');
+  }
 
   function handleLogout() {
     logout();
@@ -87,6 +97,10 @@ export default function MainLayout() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleToggleTheme} className="cursor-pointer">
+                <HugeiconsIcon icon={isDark ? Sun01Icon : Moon01Icon} size={16} />
+                <span>{isDark ? '淺色模式' : '深色模式'}</span>
+              </DropdownMenuItem>
               {user?.role === 'admin' && (
                 <DropdownMenuItem onClick={() => navigate('/admin')} className="cursor-pointer">
                   <HugeiconsIcon icon={Settings01Icon} size={16} />

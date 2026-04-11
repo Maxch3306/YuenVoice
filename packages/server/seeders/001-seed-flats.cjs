@@ -1,6 +1,5 @@
 'use strict'
 
-const bcrypt = require('bcrypt')
 const crypto = require('crypto')
 
 function generatePassword() {
@@ -37,14 +36,12 @@ module.exports = {
       for (const floor of floors) {
         for (const unit of units) {
           const rawPassword = generatePassword()
-          const hash = await bcrypt.hash(rawPassword, 12)
 
           flats.push({
             id: crypto.randomUUID(),
             block,
             floor,
             unit_number: unit,
-            registration_password_hash: hash,
             registration_password: rawPassword,
             is_registration_open: true,
             created_at: now,

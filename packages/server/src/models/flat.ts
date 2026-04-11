@@ -6,8 +6,7 @@ export class Flat extends Model<InferAttributes<Flat>, InferCreationAttributes<F
   declare block: string
   declare floor: string
   declare unit_number: string
-  declare registration_password_hash: string
-  declare registration_password: CreationOptional<string | null>
+  declare registration_password: string
   declare is_registration_open: CreationOptional<boolean>
   declare created_at: CreationOptional<Date>
   declare updated_at: CreationOptional<Date>
@@ -32,13 +31,9 @@ Flat.init(
       type: DataTypes.STRING,
       allowNull: false,
     },
-    registration_password_hash: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
     registration_password: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: false,
     },
     is_registration_open: {
       type: DataTypes.BOOLEAN,

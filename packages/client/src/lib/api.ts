@@ -67,11 +67,14 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await axios.post(
+        const { data } = await axios.post(
           `${import.meta.env.VITE_API_URL || ''}/api/auth/refresh`,
           {},
           { withCredentials: true }
         );
+        // Update auth store with the new tokens so subsequent requests use them
+        const { useAuthStore } = await import('@/stores/auth-store');
+        useAuthStore.getState().setAuth(data.user, data.accessToken);
         processQueue(null);
         return api(originalRequest);
       } catch (refreshError) {

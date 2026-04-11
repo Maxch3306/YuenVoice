@@ -67,6 +67,11 @@ export async function getFlats(
   return data;
 }
 
+export async function getFlatBlocks(): Promise<string[]> {
+  const { data } = await api.get<string[]>('/api/admin/flats/blocks');
+  return data;
+}
+
 export async function createFlat(data: {
   block: string;
   floor: string;

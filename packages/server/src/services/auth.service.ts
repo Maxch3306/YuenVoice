@@ -72,9 +72,8 @@ export async function register(
     throw err
   }
 
-  // Verify flat registration password
-  const validFlatPassword = await comparePassword(data.flatPassword, flat.registration_password_hash)
-  if (!validFlatPassword) {
+  // Verify flat registration password (plaintext comparison)
+  if (data.flatPassword !== flat.registration_password) {
     const err = new Error('Invalid flat or registration password')
     ;(err as any).statusCode = 400
     throw err

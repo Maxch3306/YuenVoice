@@ -53,8 +53,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell (HTML, JS, CSS, fonts, icons): cache-first
-  event.respondWith(cacheFirst(request, STATIC_CACHE));
+  // Navigation requests (HTML): network-first so the latest index.html is always served
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  // Hashed assets (Vite output like /assets/index-abc123.js): cache-first (immutable)
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  // Other static files (fonts, icons, manifest): stale-while-revalidate
+  event.respondWith(staleWhileRevalidate(request, STATIC_CACHE));
 });
 
 // ── Cache-first strategy ───────────────────────────────────────
@@ -97,6 +109,31 @@ async function networkFirst(request, cacheName) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+}
+
+// ── Stale-while-revalidate strategy ───────────────────────────
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await caches.match(request);
+  const fetchPromise = fetch(request)
+    .then((response) => {
+      if (response.ok) {
+        cache.put(request, response.clone());
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  // Return cached immediately if available, otherwise wait for network
+  if (cached) return cached;
+  const response = await fetchPromise;
+  if (response) return response;
+
+  if (request.mode === 'navigate') {
+    const fallback = await caches.match('/index.html');
+    if (fallback) return fallback;
+  }
+  return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
 }
 
 // ── Push notification handler ──────────────────────────────────

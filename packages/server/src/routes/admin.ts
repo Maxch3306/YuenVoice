@@ -3,7 +3,6 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { User, Flat, AuditLog, IncidentReport, DiscussionPost, OcDocument } from '../models/index.js'
 import { parsePagination, paginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
-import { hashPassword } from '../utils/hash.js'
 import { randomBytes } from 'node:crypto'
 
 const ROLES = ['resident', 'oc_committee', 'mgmt_staff', 'admin'] as const
@@ -180,6 +179,16 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     }
   )
 
+  // GET /api/admin/flats/blocks — distinct block values
+  fastify.get('/api/admin/flats/blocks', async () => {
+    const rows = await Flat.findAll({
+      attributes: [[fn('DISTINCT', col('block')), 'block']],
+      order: [['block', 'ASC']],
+      raw: true,
+    })
+    return rows.map((r: any) => r.block)
+  })
+
   // GET /api/admin/flats — list flats (paginated, filter by block, include resident count)
   fastify.get(
     '/api/admin/flats',
@@ -238,12 +247,51 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         const json = flat.toJSON() as any
         json.residentCount = json.residents?.length ?? 0
         delete json.residents
-        // Don't expose password hash
-        delete json.registration_password_hash
         return json
       })
 
       return paginatedResponse(data, count, page, limit)
+    }
+  )
+
+  // GET /api/admin/flats/export-csv — export all flats as CSV
+  fastify.get(
+    '/api/admin/flats/export-csv',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            block: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Querystring: { block?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const where: Record<string, unknown> = {}
+      if (request.query.block) {
+        where.block = request.query.block
+      }
+
+      const flats = await Flat.findAll({
+        where,
+        order: [['block', 'ASC'], ['floor', 'ASC'], ['unit_number', 'ASC']],
+      })
+
+      const BOM = '\uFEFF'
+      const header = '座,樓層,單位,註冊密碼,註冊狀態'
+      const rows = flats.map((f) =>
+        `${f.block},${f.floor},${f.unit_number},${f.registration_password},${f.is_registration_open ? '開放' : '關閉'}`
+      )
+      const csv = BOM + [header, ...rows].join('\n')
+
+      reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="flats-${new Date().toISOString().slice(0, 10)}.csv"`)
+        .send(csv)
     }
   )
 
@@ -280,13 +328,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
       // Generate registration password
       const password = randomBytes(4).toString('hex').toUpperCase()
-      const hash = await hashPassword(password)
 
       const flat = await Flat.create({
         block,
         floor,
         unit_number: unitNumber,
-        registration_password_hash: hash,
         registration_password: password,
         is_registration_open: true,
       })
@@ -298,7 +344,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       })
 
       const json = flat.toJSON() as any
-      delete json.registration_password_hash
       return reply.status(201).send(json)
     }
   )
@@ -363,7 +408,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       await logAudit(request.user.id, 'update_flat', 'flat', flat.id, changes)
 
       const json = flat.toJSON() as any
-      delete json.registration_password_hash
       return json
     }
   )
@@ -436,9 +480,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
       // Generate a random 8-character alphanumeric password
       const newPassword = randomBytes(4).toString('hex').toUpperCase()
-      const hash = await hashPassword(newPassword)
 
-      flat.registration_password_hash = hash
       flat.registration_password = newPassword
       await flat.save()
 
