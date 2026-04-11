@@ -44,7 +44,7 @@ Agents merge results at wave boundaries before the next wave begins.
 | Item | Detail |
 |------|--------|
 | Files | Everything under `packages/client/` |
-| Action | `pnpm create vite`, install React 18, TypeScript, Tailwind, shadcn/ui init |
+| Action | `pnpm create vite`, install React 19, TypeScript, Tailwind, shadcn/ui init |
 
 **Deliverables:**
 - [ ] Vite + React + TypeScript project
@@ -127,7 +127,7 @@ Wave 1 Agents (parallel)
 - [ ] `plugins/redis.ts` — ioredis client plugin, exposes `fastify.redis`
 - [ ] `plugins/upload.ts` — `@fastify/multipart` config, file validation (type, size), storage adapter (local + S3 interface)
 - [ ] `middleware/rate-limit.ts` — `@fastify/rate-limit` config per route group
-- [ ] `utils/hash.ts` — bcrypt hash/compare helpers
+- [ ] `utils/hash.ts` — Argon2id hash/compare helpers
 - [ ] `utils/pagination.ts` — standard pagination params parser + Sequelize query builder
 - [ ] `utils/audit.ts` — `logAudit(userId, action, entityType, entityId, metadata)` helper
 - [ ] Register all plugins in `app.ts` (CORS, Helmet, rate-limit, JWT, Redis, upload, auth, rbac)
@@ -153,7 +153,7 @@ Wave 1 Agents (parallel)
 - [ ] `components/layouts/MainLayout.tsx` — App shell with sidebar/bottom nav, header, notification bell
 - [ ] `components/layouts/AuthLayout.tsx` — Minimal layout for login/register pages
 - [ ] `components/layouts/AdminLayout.tsx` — Admin-specific layout with side menu
-- [ ] `App.tsx` — React Router v6 setup with all routes (from architecture doc Section 3.1)
+- [ ] `App.tsx` — React Router v7 setup with all routes (from architecture doc Section 3.1)
   - Protected route wrapper (redirects to `/login` if not authenticated)
   - Role-based route guard (admin routes)
 - [ ] `main.tsx` — QueryClientProvider + RouterProvider + app mount

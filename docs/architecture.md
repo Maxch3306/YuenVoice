@@ -14,7 +14,7 @@ YUENVOICE is a monorepo PWA with a clear client-server separation. The frontend 
 ┌─────────────────────────────────────────────────────────────┐
 │                        Client (PWA)                         │
 │  ┌───────────┐  ┌───────────┐  ┌──────────┐  ┌──────────┐  │
-│  │  React 18  │  │ shadcn/ui │  │  Zustand  │  │  SW/Push │  │
+│  │  React 19  │  │ shadcn/ui │  │  Zustand  │  │  SW/Push │  │
 │  │ + Router   │  │ Tailwind  │  │  State    │  │  Offline │  │
 │  └─────┬─────┘  └───────────┘  └─────┬────┘  └─────┬────┘  │
 │        │                              │              │       │
@@ -145,7 +145,7 @@ yuenvoice/
 
 ### 3.1 Routing
 
-React Router v6 with layout-based routing. Protected routes redirect unauthenticated users to `/login`.
+React Router v7 with layout-based routing. Protected routes redirect unauthenticated users to `/login`.
 
 ```
 /                          → Redirect to /reports (default home)
@@ -492,8 +492,8 @@ Return file metadata (path, type, size) → saved to DB
 | Transport | HTTPS (TLS 1.3) |
 | Authentication | JWT (access 15min + refresh 7d httpOnly cookie) |
 | Authorization | RBAC preHandler per route |
-| Password hashing | bcrypt, cost factor 12 |
-| Flat registration password | bcrypt hashed, compared on registration |
+| Password hashing | Argon2id (OWASP recommended: memoryCost 19 MiB, timeCost 2, parallelism 1) |
+| Flat registration password | Argon2id hashed, compared on registration |
 
 ### 8.2 Rate Limiting
 

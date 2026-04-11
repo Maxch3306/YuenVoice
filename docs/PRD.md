@@ -29,7 +29,7 @@ Replace fragmented paper-based and informal communication with a single, accessi
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Vite + React 18 + TypeScript |
+| Frontend | Vite + React 19 + TypeScript |
 | UI Components | shadcn/ui + Tailwind CSS |
 | Backend | Fastify (Node.js) |
 | Database | PostgreSQL |
@@ -464,7 +464,7 @@ AuditLog (審計日誌)
 ### 8.2 Security / 安全
 - All API endpoints require authentication (except auth routes)
 - Role-based access control enforced at API level
-- Passwords hashed with bcrypt (cost factor 12)
+- Passwords hashed with Argon2id (OWASP recommended settings)
 - Rate limiting on auth endpoints to prevent brute-force attacks
 - Input sanitization to prevent XSS and SQL injection
 - HTTPS enforced in production
