@@ -157,9 +157,18 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     '/api/push/subscribe',
     {
       preHandler: [fastify.authenticate],
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            endpoint: { type: 'string', format: 'uri' },
+          },
+        },
+      },
     },
     async (request, reply) => {
-      await pushService.unsubscribe(fastify.redis, request.user.id)
+      const body = request.body as { endpoint?: string } | undefined
+      await pushService.unsubscribe(fastify.redis, request.user.id, body?.endpoint)
       return { message: 'Unsubscribed' }
     }
   )
@@ -173,26 +182,18 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const userId = request.user.id
 
-      // Check if subscription exists
-      const subJson = await fastify.redis.get(`push:sub:${userId}`)
-      if (!subJson) {
-        return reply.status(400).send({ error: '尚未訂閱推送通知，請先允許通知權限' })
-      }
-
       try {
-        const subscription = JSON.parse(subJson)
-        const webpush = await import('web-push')
-        await webpush.default.sendNotification(
-          { endpoint: subscription.endpoint, keys: subscription.keys },
-          JSON.stringify({ title: 'YUENVOICE 測試', body: '推送通知測試成功！', url: '/' })
+        const sent = await pushService.sendToUser(
+          fastify.redis,
+          userId,
+          { title: 'YUENVOICE 測試', body: '推送通知測試成功！', url: '/' }
         )
-        return { message: 'Test push sent' }
+        if (sent === 0) {
+          return reply.status(400).send({ error: '尚未訂閱推送通知，請先允許通知權限' })
+        }
+        return { message: `Test push sent to ${sent} device(s)` }
       } catch (err: any) {
         request.log.error(err, 'Push test failed')
-        if (err?.statusCode === 410) {
-          await fastify.redis.del(`push:sub:${userId}`)
-          return reply.status(400).send({ error: '推送訂閱已過期，請重新訂閱' })
-        }
         return reply.status(500).send({ error: `推送失敗: ${err?.message ?? 'unknown error'}` })
       }
     }

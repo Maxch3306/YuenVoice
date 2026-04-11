@@ -31,6 +31,6 @@ export async function subscribePush(
   await api.post('/api/push/subscribe', subscription);
 }
 
-export async function unsubscribePush(): Promise<void> {
-  await api.delete('/api/push/subscribe');
+export async function unsubscribePush(endpoint?: string): Promise<void> {
+  await api.delete('/api/push/subscribe', { data: endpoint ? { endpoint } : undefined });
 }
