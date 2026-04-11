@@ -103,7 +103,7 @@ export default function AdminLayout() {
             <NavLink
               to="/reports"
               onClick={() => setMobileMenuOpen(false)}
-              className="mt-4 flex h-11 cursor-pointer items-center gap-3 rounded-md border-t border-border px-3 pt-4 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
+              className="mt-4 flex h-11 cursor-pointer items-center gap-3 rounded-md border-t border-border px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
             >
               <HugeiconsIcon icon={ArrowLeft01Icon} size={20} />
               <span>返回主頁</span>

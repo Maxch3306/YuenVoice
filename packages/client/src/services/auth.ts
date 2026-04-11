@@ -36,10 +36,8 @@ export async function login(data: LoginPayload): Promise<AuthResponse> {
   return response.data;
 }
 
-export async function refresh(): Promise<{ accessToken: string }> {
-  const response = await api.post<{ accessToken: string }>(
-    '/api/auth/refresh'
-  );
+export async function refresh(): Promise<AuthResponse> {
+  const response = await api.post<AuthResponse>('/api/auth/refresh');
   return response.data;
 }
 

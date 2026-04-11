@@ -188,7 +188,7 @@ function AttachmentGallery({ report }: { report: IncidentReport }) {
         <CardContent>
           <div className="grid grid-cols-3 gap-2">
             {attachments.map((att) => {
-              const src = `${apiBase}/${att.file_path}`;
+              const src = `${apiBase}/uploads/${att.file_path}`;
               if (isImage(att.file_type)) {
                 return (
                   <button

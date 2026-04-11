@@ -147,13 +147,15 @@ export default async function discussionRoutes(fastify: FastifyInstance) {
       const parts = request.parts()
 
       const fields: Record<string, string> = {}
-      const files: any[] = []
+      const files: { buffer: Buffer; mimetype: string; filename: string }[] = []
 
       for await (const part of parts) {
         if (part.type === 'field') {
           fields[part.fieldname] = (part as any).value as string
         } else if (part.type === 'file') {
-          files.push(part)
+          // Must consume the stream before the next part can be parsed
+          const buffer = await part.toBuffer()
+          files.push({ buffer, mimetype: part.mimetype, filename: part.filename })
         }
       }
 

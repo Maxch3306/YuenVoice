@@ -5,6 +5,7 @@ import {
   PinIcon,
   FavouriteIcon,
   Comment01Icon,
+  Image01Icon,
   PlusSignIcon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
@@ -39,9 +40,9 @@ function formatDate(iso: string): string {
 function PostCard({ post }: { post: DiscussionPost }) {
   const navigate = useNavigate();
   const { name, isAnon } = authorDisplay(post);
-  const reactionCount = post.reactions?.length ?? 0;
-  const commentCount = post.comments?.length ?? 0;
-  const images = post.images ?? [];
+  const reactionCount = (post as any).reactionCount ?? post.reactions?.length ?? 0;
+  const commentCount = (post as any).commentCount ?? post.comments?.length ?? 0;
+  const imageCount = (post as any).imageCount ?? post.images?.length ?? 0;
 
   return (
     <Card
@@ -59,27 +60,9 @@ function PostCard({ post }: { post: DiscussionPost }) {
 
         <h3 className="mb-1 font-medium leading-snug">{post.title}</h3>
 
-        <p className="mb-2 line-clamp-2 text-sm text-muted-foreground">
-          {excerpt(post.body)}
+        <p className="mb-2 line-clamp-2 break-words text-sm text-muted-foreground">
+          {(post as any).bodyExcerpt ?? excerpt(post.body)}
         </p>
-
-        {images.length > 0 && (
-          <div className="mb-2 flex gap-2">
-            {images.slice(0, 3).map((img) => (
-              <img
-                key={img.id}
-                src={img.file_path}
-                alt=""
-                className="h-16 w-16 rounded-md object-cover"
-              />
-            ))}
-            {images.length > 3 && (
-              <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                +{images.length - 3}
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
@@ -88,6 +71,12 @@ function PostCard({ post }: { post: DiscussionPost }) {
             {formatDate(post.created_at)}
           </span>
           <span className="flex items-center gap-3">
+            {imageCount > 0 && (
+              <span className="flex items-center gap-1">
+                <HugeiconsIcon icon={Image01Icon} size={14} />
+                {imageCount}
+              </span>
+            )}
             <span className="flex items-center gap-1">
               <HugeiconsIcon icon={FavouriteIcon} size={14} />
               {reactionCount}

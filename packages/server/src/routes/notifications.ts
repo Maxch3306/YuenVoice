@@ -88,6 +88,18 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     }
   )
 
+  // PATCH /api/notifications/read-all — mark all as read (must be before :id/read)
+  fastify.patch(
+    '/api/notifications/read-all',
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (request) => {
+      await notificationService.markAllAsRead(request.user.id)
+      return { message: 'All notifications marked as read' }
+    }
+  )
+
   // PATCH /api/notifications/:id/read — mark as read (user can only mark own)
   fastify.patch(
     '/api/notifications/:id/read',
@@ -149,6 +161,40 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       await pushService.unsubscribe(fastify.redis, request.user.id)
       return { message: 'Unsubscribed' }
+    }
+  )
+
+  // POST /api/push/test — send a test push notification to the current user
+  fastify.post(
+    '/api/push/test',
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const userId = request.user.id
+
+      // Check if subscription exists
+      const subJson = await fastify.redis.get(`push:sub:${userId}`)
+      if (!subJson) {
+        return reply.status(400).send({ error: '尚未訂閱推送通知，請先允許通知權限' })
+      }
+
+      try {
+        const subscription = JSON.parse(subJson)
+        const webpush = await import('web-push')
+        await webpush.default.sendNotification(
+          { endpoint: subscription.endpoint, keys: subscription.keys },
+          JSON.stringify({ title: 'YUENVOICE 測試', body: '推送通知測試成功！', url: '/' })
+        )
+        return { message: 'Test push sent' }
+      } catch (err: any) {
+        request.log.error(err, 'Push test failed')
+        if (err?.statusCode === 410) {
+          await fastify.redis.del(`push:sub:${userId}`)
+          return reply.status(400).send({ error: '推送訂閱已過期，請重新訂閱' })
+        }
+        return reply.status(500).send({ error: `推送失敗: ${err?.message ?? 'unknown error'}` })
+      }
     }
   )
 }

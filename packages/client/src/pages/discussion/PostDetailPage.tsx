@@ -102,7 +102,7 @@ function ImageLightbox({
       <DialogContent className="flex max-h-[90vh] max-w-[90vw] flex-col items-center gap-4 bg-background/95 p-2 sm:p-6">
         <DialogTitle className="sr-only">圖片瀏覽</DialogTitle>
         <img
-          src={current.file_path}
+          src={`/uploads/${current.file_path}`}
           alt=""
           className="max-h-[75vh] max-w-full rounded-lg object-contain"
         />
@@ -432,7 +432,7 @@ export default function PostDetailPage() {
       </div>
 
       {/* Post Body */}
-      <div className="mb-6 font-sans text-base leading-relaxed whitespace-pre-wrap">
+      <div className="mb-6 break-words font-sans text-base leading-relaxed whitespace-pre-wrap">
         {post.body}
       </div>
 
@@ -447,7 +447,7 @@ export default function PostDetailPage() {
               className="overflow-hidden rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <img
-                src={img.file_path}
+                src={`/uploads/${img.file_path}`}
                 alt=""
                 className="aspect-square w-full object-cover transition-transform hover:scale-105"
               />

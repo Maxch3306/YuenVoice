@@ -8,9 +8,8 @@ import {
   User,
   Flat,
 } from '../models/index.js'
-import { saveFile } from '../plugins/upload.js'
+import { saveFile, type FileInput } from '../plugins/upload.js'
 import { logAudit } from '../utils/audit.js'
-import type { MultipartFile } from '@fastify/multipart'
 import type { PaginationParams } from '../utils/pagination.js'
 import { sanitizeText } from '../utils/sanitize.js'
 
@@ -98,7 +97,12 @@ export async function listPosts(
       },
     ],
     attributes: {
+      exclude: ['body'],
       include: [
+        [
+          literal(`LEFT(body, 100)`),
+          'bodyExcerpt',
+        ],
         [
           literal(`(SELECT COUNT(*) FROM post_images WHERE post_images.post_id = "DiscussionPost"."id")`),
           'imageCount',
@@ -132,7 +136,7 @@ export async function createPost(
   boardId: string,
   userId: string,
   data: { title: string; body: string; isAnonymous?: boolean },
-  files?: AsyncGenerator<MultipartFile> | MultipartFile[],
+  files?: FileInput[],
 ) {
   const post = await DiscussionPost.create({
     board_id: boardId,
@@ -145,11 +149,7 @@ export async function createPost(
   const images: any[] = []
 
   if (files) {
-    const fileArray = Symbol.asyncIterator in (files as any)
-      ? await collectAsync(files as AsyncGenerator<MultipartFile>)
-      : (files as MultipartFile[])
-
-    for (const file of fileArray.slice(0, 5)) {
+    for (const file of files.slice(0, 5)) {
       const saved = await saveFile(file, 'posts')
       const image = await PostImage.create({
         post_id: post.id,
@@ -344,14 +344,4 @@ export async function moderatePost(
   }
 
   return post.toJSON()
-}
-
-// ── Utility ──
-
-async function collectAsync<T>(gen: AsyncGenerator<T>): Promise<T[]> {
-  const items: T[] = []
-  for await (const item of gen) {
-    items.push(item)
-  }
-  return items
 }

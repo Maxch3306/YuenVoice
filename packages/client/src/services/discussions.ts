@@ -29,17 +29,17 @@ export async function createPost(
   boardId: string,
   formData: FormData
 ): Promise<DiscussionPost> {
-  const { data } = await api.post<DiscussionPost>(
+  const { data } = await api.post<{ data: DiscussionPost }>(
     `/api/boards/${boardId}/posts`,
     formData,
     { headers: { 'Content-Type': 'multipart/form-data' } }
   );
-  return data;
+  return data.data;
 }
 
 export async function getPost(postId: string): Promise<DiscussionPost> {
-  const { data } = await api.get<DiscussionPost>(`/api/posts/${postId}`);
-  return data;
+  const { data } = await api.get<{ data: DiscussionPost }>(`/api/posts/${postId}`);
+  return data.data;
 }
 
 export async function addComment(
@@ -47,22 +47,22 @@ export async function addComment(
   content: string,
   isAnonymous?: boolean
 ): Promise<PostComment> {
-  const { data } = await api.post<PostComment>(`/api/posts/${postId}/comments`, {
+  const { data } = await api.post<{ data: PostComment }>(`/api/posts/${postId}/comments`, {
     content,
     isAnonymous: isAnonymous ?? false,
   });
-  return data;
+  return data.data;
 }
 
 export async function toggleReaction(
   postId: string,
   type: string = 'like'
 ): Promise<{ reacted: boolean; totalReactions: number }> {
-  const { data } = await api.post<{ reacted: boolean; totalReactions: number }>(
+  const { data } = await api.post<{ data: { reacted: boolean; totalReactions: number } }>(
     `/api/posts/${postId}/reactions`,
     { type }
   );
-  return data;
+  return data.data;
 }
 
 export async function flagPost(
@@ -76,11 +76,11 @@ export async function moderatePost(
   postId: string,
   action: string
 ): Promise<DiscussionPost> {
-  const { data } = await api.patch<DiscussionPost>(
+  const { data } = await api.patch<{ data: DiscussionPost }>(
     `/api/posts/${postId}/moderate`,
     { action }
   );
-  return data;
+  return data.data;
 }
 
 // ─── TanStack Query Hooks ───────────────────────────────────────

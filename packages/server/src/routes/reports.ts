@@ -134,16 +134,52 @@ export default async function reportRoutes(fastify: FastifyInstance) {
   const allRoles = ['resident', 'oc_committee', 'mgmt_staff', 'admin']
   const mgmtRoles = ['mgmt_staff', 'admin']
 
-  // POST /api/reports — create report
+  // POST /api/reports — create report (multipart: fields + optional attachments)
   fastify.post(
     '/',
     {
-      schema: createReportSchema,
       preHandler: [fastify.authenticate, fastify.rbac(allRoles)],
       config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
     },
     async (request, reply) => {
-      const report = await reportService.create(request.user.id, request.body as CreateReportBody)
+      const parts = request.parts()
+      const fields: Record<string, string> = {}
+      const files: { buffer: Buffer; mimetype: string; filename: string }[] = []
+
+      for await (const part of parts) {
+        if (part.type === 'field') {
+          fields[part.fieldname] = (part as any).value as string
+        } else if (part.type === 'file') {
+          const buffer = await part.toBuffer()
+          files.push({ buffer, mimetype: part.mimetype, filename: part.filename })
+        }
+      }
+
+      // Validate required fields
+      if (!fields.title || fields.title.length > 200) {
+        return reply.status(400).send({ error: 'Bad Request', message: 'title is required (max 200 chars)' })
+      }
+      if (!fields.type || !['repair', 'complaint', 'inquiry'].includes(fields.type)) {
+        return reply.status(400).send({ error: 'Bad Request', message: 'type must be repair, complaint, or inquiry' })
+      }
+      if (!fields.description || fields.description.length > 5000) {
+        return reply.status(400).send({ error: 'Bad Request', message: 'description is required (max 5000 chars)' })
+      }
+
+      const report = await reportService.create(request.user.id, {
+        title: fields.title,
+        type: fields.type as 'repair' | 'complaint' | 'inquiry',
+        description: fields.description,
+        locationBlock: fields.locationBlock || null,
+        locationFloor: fields.locationFloor || null,
+        locationArea: fields.locationArea || null,
+      })
+
+      // Save attachments if any
+      if (files.length > 0) {
+        await reportService.addAttachments(report.id, files)
+      }
+
       return reply.status(201).send(report)
     }
   )
@@ -243,7 +279,8 @@ export default async function reportRoutes(fastify: FastifyInstance) {
       const parts = request.files()
       const files = []
       for await (const part of parts) {
-        files.push(part)
+        const buffer = await part.toBuffer()
+        files.push({ buffer, mimetype: part.mimetype, filename: part.filename })
       }
 
       if (files.length === 0) {

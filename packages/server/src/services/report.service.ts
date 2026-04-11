@@ -9,8 +9,7 @@ import {
 } from '../models/index.js'
 import { parsePagination, paginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
-import { saveFile, type SaveFileResult } from '../plugins/upload.js'
-import type { MultipartFile } from '@fastify/multipart'
+import { saveFile, type SaveFileResult, type FileInput } from '../plugins/upload.js'
 import { sanitizeText } from '../utils/sanitize.js'
 
 // ── Types ──
@@ -250,7 +249,7 @@ export async function addComment(
  */
 export async function addAttachments(
   reportId: string,
-  files: MultipartFile[]
+  files: FileInput[]
 ): Promise<IncidentAttachment[] | null> {
   // Verify report exists
   const report = await IncidentReport.findByPk(reportId)

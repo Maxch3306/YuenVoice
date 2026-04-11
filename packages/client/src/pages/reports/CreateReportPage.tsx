@@ -5,6 +5,7 @@ import { ArrowLeft01Icon, Cancel01Icon, Image01Icon } from '@hugeicons/core-free
 
 import { cn } from '@/lib/utils';
 import { useCreateReport } from '@/services/reports';
+import { useBlocks, useFloors } from '@/services/flats';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,14 +25,13 @@ import {
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
-const BLOCKS = ['A', 'B', 'C', 'D', 'E'];
-const FLOORS = Array.from({ length: 40 }, (_, i) => String(i + 1));
-
 // ─── Component ──────────────────────────────────────────────────
 
 export default function CreateReportPage() {
   const navigate = useNavigate();
   const createReport = useCreateReport();
+  const { data: BLOCKS = [] } = useBlocks();
+  const { data: FLOORS = [] } = useFloors();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state

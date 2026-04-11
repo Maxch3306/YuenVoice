@@ -29,13 +29,10 @@ import {
 
 import { useAuthStore } from '@/stores/auth-store';
 import { register } from '@/services/auth';
+import { useBlocks, useFloors, useUnits } from '@/services/flats';
 import api from '@/lib/api';
 
 // ─── Constants ──────────────────────────────────────────────────
-
-const BLOCKS = ['A', 'B', 'C'];
-const FLOORS = Array.from({ length: 20 }, (_, i) => String(i + 1));
-const UNITS = Array.from({ length: 8 }, (_, i) => String(i + 1));
 
 const STEP_LABELS = ['選擇單位', '驗證密碼', '建立帳戶'];
 
@@ -127,11 +124,17 @@ function Step1({
   errors,
   onChange,
   onNext,
+  blocks,
+  floors,
+  units,
 }: {
   data: Step1Data;
   errors: FieldErrors;
   onChange: (field: keyof Step1Data, value: string) => void;
   onNext: () => void;
+  blocks: string[];
+  floors: string[];
+  units: string[];
 }) {
   return (
     <div className="space-y-5">
@@ -146,14 +149,14 @@ function Step1({
       <div className="space-y-2">
         <Label className="text-sm font-medium">座 (Block)</Label>
         <Select
-          value={data.block}
+          value={data.block || undefined}
           onValueChange={(v) => onChange('block', v)}
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="選擇座數" />
           </SelectTrigger>
           <SelectContent>
-            {BLOCKS.map((b) => (
+            {blocks.map((b) => (
               <SelectItem key={b} value={b}>
                 {b}座
               </SelectItem>
@@ -169,14 +172,15 @@ function Step1({
       <div className="space-y-2">
         <Label className="text-sm font-medium">樓層 (Floor)</Label>
         <Select
-          value={data.floor}
+          value={data.floor || undefined}
           onValueChange={(v) => onChange('floor', v)}
+          disabled={!data.block}
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="選擇樓層" />
           </SelectTrigger>
           <SelectContent>
-            {FLOORS.map((f) => (
+            {floors.map((f) => (
               <SelectItem key={f} value={f}>
                 {f}樓
               </SelectItem>
@@ -192,14 +196,15 @@ function Step1({
       <div className="space-y-2">
         <Label className="text-sm font-medium">單位 (Unit)</Label>
         <Select
-          value={data.unitNumber}
+          value={data.unitNumber || undefined}
           onValueChange={(v) => onChange('unitNumber', v)}
+          disabled={!data.block || !data.floor}
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="選擇單位" />
           </SelectTrigger>
           <SelectContent>
-            {UNITS.map((u) => (
+            {units.map((u) => (
               <SelectItem key={u} value={u}>
                 {u}
               </SelectItem>
@@ -499,6 +504,10 @@ export default function RegisterPage() {
     unitNumber: '',
   });
 
+  const { data: blocks = [] } = useBlocks();
+  const { data: floors = [] } = useFloors();
+  const { data: units = [] } = useUnits(step1.block, step1.floor);
+
   // Step 2 data
   const [flatPassword, setFlatPassword] = useState('');
   const [flatPasswordError, setFlatPasswordError] = useState('');
@@ -649,8 +658,22 @@ export default function RegisterPage() {
           <Step1
             data={step1}
             errors={fieldErrors}
-            onChange={handleStep1Change}
+            onChange={(field, value) => {
+              if (field === 'block') {
+                setStep1({ block: value, floor: '', unitNumber: '' });
+              } else if (field === 'floor') {
+                setStep1((prev) => ({ ...prev, floor: value, unitNumber: '' }));
+              } else {
+                setStep1((prev) => ({ ...prev, [field]: value }));
+              }
+              if (fieldErrors[field]) {
+                setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+              }
+            }}
             onNext={handleNextStep1}
+            blocks={blocks}
+            floors={floors}
+            units={units}
           />
         )}
 

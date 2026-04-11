@@ -90,7 +90,7 @@ export default function MainLayout() {
                 to="/admin"
                 className={({ isActive }) =>
                   cn(
-                    'mt-4 flex h-11 cursor-pointer items-center gap-3 rounded-md border-t border-border px-3 pt-4 text-sm font-medium transition-colors duration-150',
+                    'mt-4 flex h-11 cursor-pointer items-center gap-3 rounded-md border-t border-border px-3 text-sm font-medium transition-colors duration-150',
                     isActive
                       ? 'bg-accent text-primary'
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'

@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { Notification01Icon } from '@hugeicons/core-free-icons';
+import { Notification01Icon, Notification03Icon } from '@hugeicons/core-free-icons';
 
 import {
   getNotifications,
   markAsRead as markAsReadApi,
   markAllAsRead as markAllAsReadApi,
+  subscribePush,
 } from '@/services/notifications';
+import { isPushSupported, requestPushPermission, subscribeToPush } from '@/lib/push';
+import api from '@/lib/api';
 import { useNotificationStore } from '@/stores/notification-store';
 import type { NotificationCategory, UserNotification } from '@/types';
 
@@ -48,6 +51,49 @@ export default function NotificationCenterPage() {
 
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [pushStatus, setPushStatus] = useState<'idle' | 'subscribing' | 'subscribed' | 'sending' | 'sent' | 'unsupported' | 'denied' | 'error'>('idle');
+  const [pushError, setPushError] = useState('');
+
+  useEffect(() => {
+    if (!isPushSupported()) {
+      setPushStatus('unsupported');
+    }
+  }, []);
+
+  async function handleTestPush() {
+    setPushError('');
+    try {
+      // Step 1: Request permission + subscribe
+      setPushStatus('subscribing');
+      const granted = await requestPushPermission();
+      if (!granted) {
+        setPushStatus('denied');
+        setPushError('請在瀏覽器設定中允許通知權限');
+        return;
+      }
+
+      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+      if (!vapidKey) {
+        setPushStatus('error');
+        setPushError('VAPID 金鑰未設定，請檢查 .env 設定');
+        return;
+      }
+
+      const subscription = await subscribeToPush(vapidKey);
+      await subscribePush(subscription.toJSON() as any);
+
+      // Step 2: Send test push
+      setPushStatus('sending');
+      const res = await api.post('/api/push/test');
+      if (res.status === 200) {
+        setPushStatus('sent');
+        setTimeout(() => setPushStatus('subscribed'), 3000);
+      }
+    } catch (err: any) {
+      setPushStatus('error');
+      setPushError(err?.response?.data?.error ?? err?.message ?? '推送測試失敗');
+    }
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['notifications', unreadOnly, page],
@@ -112,6 +158,32 @@ export default function NotificationCenterPage() {
         >
           全部標為已讀
         </Button>
+      </div>
+
+      {/* Push test */}
+      <div className="mb-4 rounded-lg border border-border p-3">
+        <div className="flex items-center gap-2">
+          <HugeiconsIcon icon={Notification03Icon} size={18} className="text-muted-foreground" />
+          <span className="flex-1 text-sm text-muted-foreground">推送通知</span>
+          {pushStatus === 'unsupported' ? (
+            <span className="text-xs text-muted-foreground">瀏覽器不支援</span>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestPush}
+              disabled={pushStatus === 'subscribing' || pushStatus === 'sending'}
+            >
+              {pushStatus === 'subscribing' && '訂閱中...'}
+              {pushStatus === 'sending' && '發送中...'}
+              {pushStatus === 'sent' && '已發送 ✓'}
+              {(pushStatus === 'idle' || pushStatus === 'subscribed' || pushStatus === 'denied' || pushStatus === 'error') && '測試推送'}
+            </Button>
+          )}
+        </div>
+        {pushError && (
+          <p className="mt-2 text-xs text-destructive">{pushError}</p>
+        )}
       </div>
 
       {/* Notification List */}

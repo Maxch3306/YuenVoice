@@ -160,3 +160,10 @@ export async function markAsRead(
 
   return userNotification
 }
+
+export async function markAllAsRead(userId: string): Promise<void> {
+  await UserNotification.update(
+    { is_read: true, read_at: new Date() },
+    { where: { user_id: userId, is_read: false } }
+  )
+}

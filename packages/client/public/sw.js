@@ -1,5 +1,5 @@
 // YUENVOICE Service Worker
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `yuenvoice-static-${CACHE_VERSION}`;
 const API_CACHE = `yuenvoice-api-${CACHE_VERSION}`;
 const IMAGE_CACHE = `yuenvoice-images-${CACHE_VERSION}`;

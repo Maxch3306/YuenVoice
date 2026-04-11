@@ -1,7 +1,6 @@
-import type { MultipartFile } from '@fastify/multipart'
 import { Op } from 'sequelize'
 import { OcDocument, User, Notification, UserNotification } from '../models/index.js'
-import { saveFile } from '../plugins/upload.js'
+import { saveFile, type FileInput } from '../plugins/upload.js'
 import { parsePagination, paginatedResponse, type PaginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
 import { unlink } from 'node:fs/promises'
@@ -26,7 +25,7 @@ export interface ListDocumentFilters {
 export async function uploadDocument(
   publisherId: string,
   data: UploadDocumentData,
-  file: MultipartFile
+  file: FileInput
 ): Promise<OcDocument> {
   const { filePath } = await saveFile(file, 'oc-documents')
 

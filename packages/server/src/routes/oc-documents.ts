@@ -31,11 +31,12 @@ export default async function ocDocumentRoutes(fastify: FastifyInstance) {
 
       // For multipart, fields come as objects with .value
       const parts: Record<string, string> = {}
-      let file: any = null
+      let file: { buffer: Buffer; mimetype: string; filename: string } | null = null
 
       for await (const part of request.parts()) {
         if (part.type === 'file') {
-          file = part
+          const buffer = await part.toBuffer()
+          file = { buffer, mimetype: part.mimetype, filename: part.filename }
         } else {
           parts[(part as any).fieldname] = (part as any).value
         }

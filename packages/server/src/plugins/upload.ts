@@ -40,8 +40,10 @@ export interface SaveFileResult {
   fileSize: number
 }
 
-export async function saveFile(file: MultipartFile, entity: string): Promise<SaveFileResult> {
-  const buffer = await file.toBuffer()
+export type FileInput = MultipartFile | { buffer: Buffer; mimetype: string; filename: string }
+
+export async function saveFile(file: FileInput, entity: string): Promise<SaveFileResult> {
+  const buffer = 'toBuffer' in file ? await file.toBuffer() : file.buffer
   const fileSize = buffer.length
 
   if (fileSize > config.uploadMaxSize) {

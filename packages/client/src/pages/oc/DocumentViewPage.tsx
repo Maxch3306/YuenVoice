@@ -72,7 +72,7 @@ export default function DocumentViewPage() {
   }
 
   const apiBase = import.meta.env.VITE_API_URL || '';
-  const fileUrl = doc ? `${apiBase}/${doc.file_path}` : '';
+  const fileUrl = doc ? `${apiBase}/uploads/${doc.file_path}` : '';
 
   if (isLoading) {
     return (
