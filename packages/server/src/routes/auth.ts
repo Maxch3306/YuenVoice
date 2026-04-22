@@ -6,15 +6,30 @@ import * as authService from '../services/auth.service.js'
 const registerSchema = {
   body: {
     type: 'object' as const,
-    required: ['block', 'unitNumber', 'flatPassword', 'name', 'email', 'password'],
+    required: ['block', 'floor', 'unitNumber', 'flatPassword', 'name', 'email', 'password'],
     properties: {
       block: { type: 'string' as const, minLength: 1 },
+      floor: { type: 'string' as const, minLength: 1 },
       unitNumber: { type: 'string' as const, minLength: 1 },
       flatPassword: { type: 'string' as const, minLength: 1 },
       name: { type: 'string' as const, minLength: 1 },
       email: { type: 'string' as const, format: 'email' },
       phone: { type: 'string' as const },
       password: { type: 'string' as const, minLength: 8 },
+    },
+    additionalProperties: false,
+  },
+}
+
+const verifyFlatPasswordSchema = {
+  body: {
+    type: 'object' as const,
+    required: ['block', 'floor', 'unitNumber', 'flatPassword'],
+    properties: {
+      block: { type: 'string' as const, minLength: 1 },
+      floor: { type: 'string' as const, minLength: 1 },
+      unitNumber: { type: 'string' as const, minLength: 1 },
+      flatPassword: { type: 'string' as const, minLength: 1 },
     },
     additionalProperties: false,
   },
@@ -93,6 +108,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{
         Body: {
           block: string
+          floor: string
           unitNumber: string
           flatPassword: string
           name: string
@@ -109,6 +125,27 @@ export default async function authRoutes(fastify: FastifyInstance) {
         user: result.user,
         accessToken: result.accessToken,
       })
+    }
+  )
+
+  // POST /verify-flat-password — step 2 of registration: confirm the flat password
+  // before collecting personal details. Does not create any account.
+  fastify.post(
+    '/verify-flat-password',
+    { schema: verifyFlatPasswordSchema, ...authRateLimit },
+    async (
+      request: FastifyRequest<{
+        Body: {
+          block: string
+          floor: string
+          unitNumber: string
+          flatPassword: string
+        }
+      }>,
+      reply: FastifyReply
+    ) => {
+      await authService.verifyFlatPassword(request.body)
+      return reply.send({ ok: true })
     }
   )
 

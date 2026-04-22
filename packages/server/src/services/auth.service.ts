@@ -51,21 +51,23 @@ async function storeRefreshToken(fastify: FastifyInstance, userId: string, sessi
   await fastify.redis.expire(key, SESSION_TTL)
 }
 
-export async function register(
-  fastify: FastifyInstance,
-  data: {
-    block: string
-    unitNumber: string
-    flatPassword: string
-    name: string
-    email: string
-    phone?: string
-    password: string
-  }
-): Promise<{ user: SafeUser; accessToken: string; refreshToken: string }> {
-  // Find flat by block + unit_number
+/**
+ * Look up a flat by block + floor + unit_number and verify its registration password.
+ * Returns the flat on success, or throws a 400 on any failure.
+ * Used both by register() and by the /verify-flat-password step-2 check.
+ */
+export async function verifyFlatPassword(data: {
+  block: string
+  floor: string
+  unitNumber: string
+  flatPassword: string
+}): Promise<Flat> {
   const flat = await Flat.findOne({
-    where: { block: data.block, unit_number: data.unitNumber },
+    where: {
+      block: data.block,
+      floor: data.floor,
+      unit_number: data.unitNumber,
+    },
   })
 
   if (!flat) {
@@ -74,19 +76,35 @@ export async function register(
     throw err
   }
 
-  // Check if registration is open
   if (!flat.is_registration_open) {
     const err = new Error('Registration is closed for this flat')
     ;(err as any).statusCode = 400
     throw err
   }
 
-  // Verify flat registration password (plaintext comparison)
   if (data.flatPassword !== flat.registration_password) {
     const err = new Error('Invalid flat or registration password')
     ;(err as any).statusCode = 400
     throw err
   }
+
+  return flat
+}
+
+export async function register(
+  fastify: FastifyInstance,
+  data: {
+    block: string
+    floor: string
+    unitNumber: string
+    flatPassword: string
+    name: string
+    email: string
+    phone?: string
+    password: string
+  }
+): Promise<{ user: SafeUser; accessToken: string; refreshToken: string }> {
+  const flat = await verifyFlatPassword(data)
 
   // Check email uniqueness
   const existingUser = await User.findOne({ where: { email: data.email } })

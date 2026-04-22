@@ -84,6 +84,7 @@ describe('POST /api/auth/register', () => {
       url: '/api/auth/register',
       payload: {
         block: 'A',
+        floor: '1',
         unitNumber: '101',
         flatPassword: 'flat123',
         name: 'Test User',
@@ -100,6 +101,7 @@ describe('POST /api/auth/register', () => {
       url: '/api/auth/register',
       payload: {
         block: 'A',
+        floor: '1',
         unitNumber: '101',
         flatPassword: 'flat123456',
         name: 'Test User',
