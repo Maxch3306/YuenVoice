@@ -67,8 +67,8 @@ export async function list(
 
   const where: WhereOptions = {}
 
-  // Residents and OC committee only see their own reports
-  if (role === 'resident' || role === 'oc_committee') {
+  // Residents only see their own reports; committee/mgmt/admin review all.
+  if (role === 'resident') {
     ;(where as any).reporter_id = userId
   }
 
@@ -120,6 +120,7 @@ export async function getById(
   role: string
 ) {
   const isMgmt = role === 'mgmt_staff' || role === 'admin'
+  const canReviewAll = isMgmt || role === 'oc_committee'
 
   const commentWhere: WhereOptions = {}
   if (!isMgmt) {
@@ -158,8 +159,8 @@ export async function getById(
     return null
   }
 
-  // Residents can only view their own reports
-  if (!isMgmt && report.reporter_id !== userId) {
+  // Residents can only view their own reports; committee/mgmt/admin can view all.
+  if (!canReviewAll && report.reporter_id !== userId) {
     return { forbidden: true }
   }
 

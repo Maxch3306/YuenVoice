@@ -131,14 +131,15 @@ interface AddCommentBody {
 // ── Route Plugin ──
 
 export default async function reportRoutes(fastify: FastifyInstance) {
-  const allRoles = ['resident', 'oc_committee', 'mgmt_staff', 'admin']
+  const reporterRoles = ['resident', 'mgmt_staff', 'admin']
   const mgmtRoles = ['mgmt_staff', 'admin']
 
   // POST /api/reports — create report (multipart: fields + optional attachments)
+  // oc_committee cannot file tickets — committee role is review-only.
   fastify.post(
     '/',
     {
-      preHandler: [fastify.authenticate, fastify.rbac(allRoles)],
+      preHandler: [fastify.authenticate, fastify.rbac(reporterRoles)],
       config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
     },
     async (request, reply) => {
