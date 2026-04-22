@@ -142,7 +142,11 @@ export type OcDocumentType =
   | 'meeting_minutes'
   | 'financial_statement'
   | 'resolution'
-  | 'notice';
+  | 'notice'
+  | 'meeting_livestream'
+  | 'meeting_recording';
+
+export type OcDocumentLinkType = 'google_meet' | 'google_drive' | 'google_site';
 
 export interface OcDocument {
   id: string;
@@ -150,7 +154,9 @@ export interface OcDocument {
   type: OcDocumentType;
   title: string;
   description: string | null;
-  file_path: string;
+  file_path: string | null;
+  external_url: string | null;
+  link_type: OcDocumentLinkType | null;
   year: number;
   created_at: string;
   updated_at: string;

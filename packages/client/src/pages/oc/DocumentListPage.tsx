@@ -2,9 +2,15 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { File01Icon, Upload01Icon, ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
+import {
+  File01Icon,
+  Upload01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Link01Icon,
+} from '@hugeicons/core-free-icons';
 
-import { getDocuments, uploadDocument } from '@/services/oc';
+import { getDocuments, uploadDocument, publishLink } from '@/services/oc';
 import { useAuthStore } from '@/stores/auth-store';
 import { useT } from '@/lib/i18n';
 import type { OcDocumentType } from '@/types';
@@ -12,7 +18,7 @@ import type { OcDocumentType } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -28,13 +34,27 @@ const typeColorMap: Record<OcDocumentType, string> = {
   financial_statement: 'bg-green-100 text-green-800 border-green-200',
   resolution: 'bg-amber-100 text-amber-800 border-amber-200',
   notice: 'bg-slate-100 text-slate-800 border-slate-200',
+  meeting_livestream: 'bg-rose-100 text-rose-800 border-rose-200',
+  meeting_recording: 'bg-purple-100 text-purple-800 border-purple-200',
 };
+
+function isValidHttpUrl(v: string): boolean {
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
 
 export default function DocumentListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
-  const canUpload = user?.role === 'oc_committee' || user?.role === 'admin';
+  const canPublish =
+    user?.role === 'oc_committee' ||
+    user?.role === 'mgmt_staff' ||
+    user?.role === 'admin';
   const t = useT();
 
   const typeLabelMap: Record<OcDocumentType, string> = {
@@ -42,6 +62,8 @@ export default function DocumentListPage() {
     financial_statement: t.docType.financial_statement,
     resolution: t.docType.resolution,
     notice: t.docType.notice,
+    meeting_livestream: t.docType.meeting_livestream,
+    meeting_recording: t.docType.meeting_recording,
   };
 
   const typeOptions: { value: string; label: string }[] = [
@@ -50,25 +72,30 @@ export default function DocumentListPage() {
     { value: 'financial_statement', label: t.docType.financial_statement },
     { value: 'resolution', label: t.docType.resolution },
     { value: 'notice', label: t.docType.notice },
+    { value: 'meeting_livestream', label: t.docType.meeting_livestream },
+    { value: 'meeting_recording', label: t.docType.meeting_recording },
   ];
 
   const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [sourceTab, setSourceTab] = useState<'file' | 'link'>('file');
 
-  // Upload form state
-  const [uploadTitle, setUploadTitle] = useState('');
-  const [uploadType, setUploadType] = useState<OcDocumentType | ''>('');
-  const [uploadYear, setUploadYear] = useState(String(currentYear));
-  const [uploadDescription, setUploadDescription] = useState('');
+  // Shared form state
+  const [title, setTitle] = useState('');
+  const [docType, setDocType] = useState<OcDocumentType | ''>('');
+  const [year, setYear] = useState(String(currentYear));
+  const [description, setDescription] = useState('');
+
+  // File tab state
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const yearParam =
-    selectedYear === 'older'
-      ? undefined
-      : Number(selectedYear);
+  // Link tab state
+  const [externalUrl, setExternalUrl] = useState('');
+
+  const yearParam = selectedYear === 'older' ? undefined : Number(selectedYear);
 
   const { data, isLoading } = useQuery({
     queryKey: ['oc-documents', selectedYear, typeFilter, page],
@@ -85,29 +112,52 @@ export default function DocumentListPage() {
     mutationFn: (formData: FormData) => uploadDocument(formData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['oc-documents'] });
-      resetUploadForm();
+      resetForm();
       setUploadOpen(false);
     },
   });
 
-  function resetUploadForm() {
-    setUploadTitle('');
-    setUploadType('');
-    setUploadYear(String(currentYear));
-    setUploadDescription('');
+  const linkMutation = useMutation({
+    mutationFn: publishLink,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['oc-documents'] });
+      resetForm();
+      setUploadOpen(false);
+    },
+  });
+
+  function resetForm() {
+    setTitle('');
+    setDocType('');
+    setYear(String(currentYear));
+    setDescription('');
     setUploadFile(null);
+    setExternalUrl('');
+    setSourceTab('file');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function handleUpload() {
-    if (!uploadTitle || !uploadType || !uploadFile) return;
-    const formData = new FormData();
-    formData.append('title', uploadTitle);
-    formData.append('type', uploadType);
-    formData.append('year', uploadYear);
-    if (uploadDescription) formData.append('description', uploadDescription);
-    formData.append('file', uploadFile);
-    uploadMutation.mutate(formData);
+  function handleSubmit() {
+    if (!title || !docType) return;
+    if (sourceTab === 'file') {
+      if (!uploadFile) return;
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('type', docType);
+      formData.append('year', year);
+      if (description) formData.append('description', description);
+      formData.append('file', uploadFile);
+      uploadMutation.mutate(formData);
+    } else {
+      if (!isValidHttpUrl(externalUrl)) return;
+      linkMutation.mutate({
+        title,
+        description: description || undefined,
+        type: docType,
+        year: Number(year),
+        externalUrl,
+      });
+    }
   }
 
   function formatDate(dateStr: string) {
@@ -118,6 +168,15 @@ export default function DocumentListPage() {
   const documents = data?.data ?? [];
   const meta = data?.meta;
   const totalPages = meta?.totalPages ?? 1;
+
+  const isPending = uploadMutation.isPending || linkMutation.isPending;
+  const canSubmit =
+    !!title &&
+    !!docType &&
+    !isPending &&
+    (sourceTab === 'file'
+      ? !!uploadFile
+      : isValidHttpUrl(externalUrl));
 
   return (
     <div className="mx-auto max-w-3xl p-4">
@@ -146,7 +205,7 @@ export default function DocumentListPage() {
         <Select
           value={typeFilter}
           onValueChange={(v) => {
-            setTypeFilter(v);
+            setTypeFilter(v === '_all' ? '' : v);
             setPage(1);
           }}
         >
@@ -155,7 +214,7 @@ export default function DocumentListPage() {
           </SelectTrigger>
           <SelectContent>
             {typeOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value || '_all'}>
+              <SelectItem key={opt.value || '_all'} value={opt.value || '_all'}>
                 {opt.label}
               </SelectItem>
             ))}
@@ -177,34 +236,45 @@ export default function DocumentListPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {documents.map((doc) => (
-            <Card
-              key={doc.id}
-              size="sm"
-              className="cursor-pointer transition-colors hover:bg-accent/40"
-              onClick={() => navigate(`/oc/${doc.id}`)}
-            >
-              <CardContent className="flex items-start gap-3 px-4 py-3">
-                <div className="mt-0.5 shrink-0 text-muted-foreground">
-                  <HugeiconsIcon icon={File01Icon} size={24} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className={typeColorMap[doc.type]}
-                    >
-                      {typeLabelMap[doc.type]}
-                    </Badge>
+          {documents.map((doc) => {
+            const isLink = !!doc.external_url;
+            return (
+              <Card
+                key={doc.id}
+                size="sm"
+                className="cursor-pointer transition-colors hover:bg-accent/40"
+                onClick={() => navigate(`/oc/${doc.id}`)}
+              >
+                <CardContent className="flex items-start gap-3 px-4 py-3">
+                  <div className="mt-0.5 shrink-0 text-muted-foreground">
+                    <HugeiconsIcon
+                      icon={isLink ? Link01Icon : File01Icon}
+                      size={24}
+                    />
                   </div>
-                  <p className="truncate text-sm font-medium">{doc.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {formatDate(doc.created_at)}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={typeColorMap[doc.type]}
+                      >
+                        {typeLabelMap[doc.type]}
+                      </Badge>
+                      {isLink && doc.link_type && (
+                        <Badge variant="outline" className="text-xs">
+                          {t.ocDocs.linkType[doc.link_type]}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="truncate text-sm font-medium">{doc.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatDate(doc.created_at)}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -233,8 +303,8 @@ export default function DocumentListPage() {
         </div>
       )}
 
-      {/* Upload Button (OC/Admin) */}
-      {canUpload && (
+      {/* Publish Button (committee / mgmt / admin) */}
+      {canPublish && (
         <Button
           className="mt-6 w-full"
           onClick={() => setUploadOpen(true)}
@@ -244,12 +314,12 @@ export default function DocumentListPage() {
         </Button>
       )}
 
-      {/* Upload Dialog */}
+      {/* Publish Dialog */}
       <Dialog
         open={uploadOpen}
         onOpenChange={(open) => {
           setUploadOpen(open);
-          if (!open) resetUploadForm();
+          if (!open) resetForm();
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -257,65 +327,80 @@ export default function DocumentListPage() {
             <DialogTitle>{t.ocDocs.uploadTitle}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-title">{t.ocDocs.docTitle}</Label>
-              <Input
-                id="doc-title"
-                value={uploadTitle}
-                onChange={(e) => setUploadTitle(e.target.value)}
-                placeholder={t.ocDocs.docTitlePlaceholder}
-              />
+          <Tabs value={sourceTab} onValueChange={(v) => setSourceTab(v as 'file' | 'link')}>
+            <TabsList className="w-full">
+              <TabsTrigger value="file" className="flex-1">
+                {t.ocDocs.sourceTabFile}
+              </TabsTrigger>
+              <TabsTrigger value="link" className="flex-1">
+                {t.ocDocs.sourceTabLink}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Shared fields */}
+            <div className="mt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-title">{t.ocDocs.docTitle}</Label>
+                <Input
+                  id="doc-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={t.ocDocs.docTitlePlaceholder}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>{t.ocDocs.docType}</Label>
+                <Select
+                  value={docType}
+                  onValueChange={(v) => setDocType(v as OcDocumentType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t.ocDocs.docTypePlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="meeting_minutes">{t.docType.meeting_minutes}</SelectItem>
+                    <SelectItem value="financial_statement">{t.docType.financial_statement}</SelectItem>
+                    <SelectItem value="resolution">{t.docType.resolution}</SelectItem>
+                    <SelectItem value="notice">{t.docType.notice}</SelectItem>
+                    <SelectItem value="meeting_livestream">{t.docType.meeting_livestream}</SelectItem>
+                    <SelectItem value="meeting_recording">{t.docType.meeting_recording}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>{t.ocDocs.year}</Label>
+                <Select value={year} onValueChange={setYear}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[currentYear, currentYear - 1, currentYear - 2, currentYear - 3].map(
+                      (y) => (
+                        <SelectItem key={y} value={String(y)}>
+                          {y}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-desc">{t.ocDocs.description}</Label>
+                <Textarea
+                  id="doc-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder={t.ocDocs.descriptionPlaceholder}
+                  rows={3}
+                />
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>{t.ocDocs.docType}</Label>
-              <Select
-                value={uploadType}
-                onValueChange={(v) => setUploadType(v as OcDocumentType)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t.ocDocs.docTypePlaceholder} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="meeting_minutes">{t.docType.meeting_minutes}</SelectItem>
-                  <SelectItem value="financial_statement">{t.docType.financial_statement}</SelectItem>
-                  <SelectItem value="resolution">{t.docType.resolution}</SelectItem>
-                  <SelectItem value="notice">{t.docType.notice}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t.ocDocs.year}</Label>
-              <Select value={uploadYear} onValueChange={setUploadYear}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[currentYear, currentYear - 1, currentYear - 2, currentYear - 3].map(
-                    (y) => (
-                      <SelectItem key={y} value={String(y)}>
-                        {y}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-desc">{t.ocDocs.description}</Label>
-              <Textarea
-                id="doc-desc"
-                value={uploadDescription}
-                onChange={(e) => setUploadDescription(e.target.value)}
-                placeholder={t.ocDocs.descriptionPlaceholder}
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-1.5">
+            {/* File tab */}
+            <TabsContent value="file" className="mt-4 space-y-1.5">
               <Label>{t.ocDocs.file}</Label>
               <div
                 className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-6 text-center transition-colors hover:border-primary/50 hover:bg-accent/30"
@@ -346,20 +431,37 @@ export default function DocumentListPage() {
                   {(uploadFile.size / (1024 * 1024)).toFixed(1)}MB
                 </p>
               )}
-            </div>
-          </div>
+            </TabsContent>
+
+            {/* Link tab */}
+            <TabsContent value="link" className="mt-4 space-y-1.5">
+              <Label htmlFor="doc-url">{t.ocDocs.externalUrl}</Label>
+              <Input
+                id="doc-url"
+                type="url"
+                value={externalUrl}
+                onChange={(e) => setExternalUrl(e.target.value)}
+                placeholder={t.ocDocs.externalUrlPlaceholder}
+                aria-invalid={!!externalUrl && !isValidHttpUrl(externalUrl)}
+              />
+              {!!externalUrl && !isValidHttpUrl(externalUrl) && (
+                <p className="text-destructive text-xs">
+                  {t.ocDocs.externalUrlInvalid}
+                </p>
+              )}
+            </TabsContent>
+          </Tabs>
 
           <DialogFooter className="gap-2 sm:gap-0">
             <DialogClose asChild>
               <Button variant="outline">{t.common.cancel}</Button>
             </DialogClose>
-            <Button
-              onClick={handleUpload}
-              disabled={
-                !uploadTitle || !uploadType || !uploadFile || uploadMutation.isPending
-              }
-            >
-              {uploadMutation.isPending ? t.common.uploading : t.ocDocs.upload}
+            <Button onClick={handleSubmit} disabled={!canSubmit}>
+              {isPending
+                ? t.common.uploading
+                : sourceTab === 'file'
+                  ? t.ocDocs.upload
+                  : t.ocDocs.publishLink}
             </Button>
           </DialogFooter>
         </DialogContent>

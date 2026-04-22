@@ -1,5 +1,5 @@
-import { Op } from 'sequelize'
 import { OcDocument, User, Notification, UserNotification } from '../models/index.js'
+import type { OcDocumentType, OcDocumentLinkType } from '../models/oc-document.js'
 import { saveFile, type FileInput } from '../plugins/upload.js'
 import { parsePagination, paginatedResponse, type PaginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
@@ -8,10 +8,10 @@ import path from 'node:path'
 import { config } from '../config/index.js'
 import { sanitizeText } from '../utils/sanitize.js'
 
-export interface UploadDocumentData {
+export interface PublishDocumentData {
   title: string
   description?: string
-  type: 'meeting_minutes' | 'financial_statement' | 'resolution' | 'notice'
+  type: OcDocumentType
   year: number
 }
 
@@ -22,10 +22,26 @@ export interface ListDocumentFilters {
   limit?: string | number
 }
 
+// Infer link_type from URL host when caller didn't specify.
+function inferLinkType(url: string): OcDocumentLinkType {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    if (host.includes('meet.google.com')) return 'google_meet'
+    if (host.includes('sites.google.com')) return 'google_site'
+    // drive.google.com, docs.google.com, etc.
+    return 'google_drive'
+  } catch {
+    return 'google_drive'
+  }
+}
+
+/**
+ * Publish a document backed by an uploaded file.
+ */
 export async function uploadDocument(
   publisherId: string,
-  data: UploadDocumentData,
-  file: FileInput
+  data: PublishDocumentData,
+  file: FileInput,
 ): Promise<OcDocument> {
   const { filePath } = await saveFile(file, 'oc-documents')
 
@@ -36,14 +52,53 @@ export async function uploadDocument(
     type: data.type,
     year: data.year,
     file_path: filePath,
+    external_url: null,
+    link_type: null,
   })
 
-  // Auto-trigger notification for all residents
+  await notifyResidents(publisherId, data.title)
+  return doc
+}
+
+/**
+ * Publish a document backed by an external link (Google Meet/Drive/Sites).
+ */
+export async function publishLink(
+  publisherId: string,
+  data: PublishDocumentData & { externalUrl: string; linkType?: OcDocumentLinkType },
+): Promise<OcDocument> {
+  // Reject non-http(s) URLs defensively.
+  let parsed: URL
+  try {
+    parsed = new URL(data.externalUrl)
+  } catch {
+    throw Object.assign(new Error('Invalid URL'), { statusCode: 400 })
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw Object.assign(new Error('URL must be http(s)'), { statusCode: 400 })
+  }
+
+  const doc = await OcDocument.create({
+    publisher_id: publisherId,
+    title: sanitizeText(data.title),
+    description: data.description ? sanitizeText(data.description) : null,
+    type: data.type,
+    year: data.year,
+    file_path: null,
+    external_url: data.externalUrl,
+    link_type: data.linkType ?? inferLinkType(data.externalUrl),
+  })
+
+  await notifyResidents(publisherId, data.title)
+  return doc
+}
+
+async function notifyResidents(publisherId: string, title: string): Promise<void> {
   try {
     const notification = await Notification.create({
       sender_id: publisherId,
       title: '新法團文件',
-      body: `已發佈新文件：${data.title}`,
+      body: `已發佈新文件：${title}`,
       category: 'general',
       target_type: 'all',
     })
@@ -58,18 +113,16 @@ export async function uploadDocument(
         allUsers.map((u) => ({
           notification_id: notification.id,
           user_id: u.id,
-        }))
+        })),
       )
     }
   } catch {
-    // Fire-and-forget: do not fail the upload if notification fails
+    // Fire-and-forget: do not fail the publish if notification fails.
   }
-
-  return doc
 }
 
 export async function listDocuments(
-  filters: ListDocumentFilters
+  filters: ListDocumentFilters,
 ): Promise<PaginatedResponse<OcDocument>> {
   const { offset, limit } = parsePagination(filters)
   const page = Number(filters.page) || 1
@@ -113,12 +166,14 @@ export async function removeDocument(docId: string, userId: string): Promise<voi
     throw Object.assign(new Error('Document not found'), { statusCode: 404 })
   }
 
-  // Delete file from storage
-  try {
-    const absolutePath = path.join(config.uploadDir, doc.file_path)
-    await unlink(absolutePath)
-  } catch {
-    // File may already be missing — continue
+  // Only attempt to unlink if this document is file-backed.
+  if (doc.file_path) {
+    try {
+      const absolutePath = path.join(config.uploadDir, doc.file_path)
+      await unlink(absolutePath)
+    } catch {
+      // File may already be missing — continue
+    }
   }
 
   await doc.destroy()

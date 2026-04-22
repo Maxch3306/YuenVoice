@@ -1,5 +1,19 @@
 import api from '@/lib/api';
-import type { OcDocument, PaginatedResponse } from '@/types';
+import type {
+  OcDocument,
+  OcDocumentLinkType,
+  OcDocumentType,
+  PaginatedResponse,
+} from '@/types';
+
+export interface PublishLinkPayload {
+  title: string;
+  description?: string;
+  type: OcDocumentType;
+  year: number;
+  externalUrl: string;
+  linkType?: OcDocumentLinkType;
+}
 
 export interface GetDocumentsParams {
   year?: number;
@@ -29,6 +43,16 @@ export async function uploadDocument(
   const { data } = await api.post<OcDocument>('/api/oc-documents', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return data;
+}
+
+export async function publishLink(
+  payload: PublishLinkPayload,
+): Promise<OcDocument> {
+  const { data } = await api.post<OcDocument>(
+    '/api/oc-documents/link',
+    payload,
+  );
   return data;
 }
 

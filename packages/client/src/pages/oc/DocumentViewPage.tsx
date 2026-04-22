@@ -1,7 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft01Icon, Download01Icon, Delete01Icon } from '@hugeicons/core-free-icons';
+import {
+  ArrowLeft01Icon,
+  Download01Icon,
+  Delete01Icon,
+  Link01Icon,
+  ArrowUpRight01Icon,
+} from '@hugeicons/core-free-icons';
 
 import { getDocument, deleteDocument } from '@/services/oc';
 import { useAuthStore } from '@/stores/auth-store';
@@ -29,6 +35,8 @@ const typeColorMap: Record<OcDocumentType, string> = {
   financial_statement: 'bg-green-100 text-green-800 border-green-200',
   resolution: 'bg-amber-100 text-amber-800 border-amber-200',
   notice: 'bg-slate-100 text-slate-800 border-slate-200',
+  meeting_livestream: 'bg-rose-100 text-rose-800 border-rose-200',
+  meeting_recording: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 
 function isPdf(filePath: string) {
@@ -44,7 +52,10 @@ export default function DocumentViewPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
-  const canDelete = user?.role === 'oc_committee' || user?.role === 'admin';
+  const canDelete =
+    user?.role === 'oc_committee' ||
+    user?.role === 'mgmt_staff' ||
+    user?.role === 'admin';
   const t = useT();
 
   const typeLabelMap: Record<OcDocumentType, string> = {
@@ -52,6 +63,8 @@ export default function DocumentViewPage() {
     financial_statement: t.docType.financial_statement,
     resolution: t.docType.resolution,
     notice: t.docType.notice,
+    meeting_livestream: t.docType.meeting_livestream,
+    meeting_recording: t.docType.meeting_recording,
   };
 
   const { data: doc, isLoading } = useQuery({
@@ -72,9 +85,6 @@ export default function DocumentViewPage() {
     const d = new Date(dateStr);
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
   }
-
-  const apiBase = import.meta.env.VITE_API_URL || '';
-  const fileUrl = doc ? `${apiBase}/uploads/${doc.file_path}` : '';
 
   if (isLoading) {
     return (
@@ -100,6 +110,10 @@ export default function DocumentViewPage() {
     );
   }
 
+  const isLink = !!doc.external_url;
+  const apiBase = import.meta.env.VITE_API_URL || '';
+  const fileUrl = doc.file_path ? `${apiBase}/uploads/${doc.file_path}` : '';
+
   return (
     <div className="mx-auto max-w-3xl p-4">
       {/* Back Button */}
@@ -115,12 +129,17 @@ export default function DocumentViewPage() {
       {/* Metadata Card */}
       <Card className="mb-6">
         <CardContent className="space-y-3 px-5 py-4">
-          <Badge
-            variant="outline"
-            className={typeColorMap[doc.type]}
-          >
-            {typeLabelMap[doc.type]}
-          </Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className={typeColorMap[doc.type]}>
+              {typeLabelMap[doc.type]}
+            </Badge>
+            {isLink && doc.link_type && (
+              <Badge variant="outline">
+                <HugeiconsIcon icon={Link01Icon} size={12} className="mr-1" />
+                {t.docView.externalLink}
+              </Badge>
+            )}
+          </div>
 
           <h2 className="text-xl font-bold">{doc.title}</h2>
 
@@ -142,12 +161,25 @@ export default function DocumentViewPage() {
           )}
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" asChild>
-              <a href={fileUrl} download>
-                <HugeiconsIcon icon={Download01Icon} size={16} />
-                <span className="ml-1.5">{t.common.download}</span>
-              </a>
-            </Button>
+            {isLink ? (
+              <Button asChild>
+                <a
+                  href={doc.external_url!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <HugeiconsIcon icon={ArrowUpRight01Icon} size={16} />
+                  <span className="ml-1.5">{t.docView.openExternal}</span>
+                </a>
+              </Button>
+            ) : (
+              <Button variant="outline" asChild>
+                <a href={fileUrl} download>
+                  <HugeiconsIcon icon={Download01Icon} size={16} />
+                  <span className="ml-1.5">{t.common.download}</span>
+                </a>
+              </Button>
+            )}
 
             {canDelete && (
               <AlertDialog>
@@ -182,8 +214,8 @@ export default function DocumentViewPage() {
         </CardContent>
       </Card>
 
-      {/* File Viewer */}
-      {isPdf(doc.file_path) && (
+      {/* Preview — only for file-backed docs. Links open externally. */}
+      {!isLink && doc.file_path && isPdf(doc.file_path) && (
         <div className="overflow-hidden rounded-2xl border">
           <iframe
             src={fileUrl}
@@ -193,7 +225,7 @@ export default function DocumentViewPage() {
         </div>
       )}
 
-      {isImage(doc.file_path) && (
+      {!isLink && doc.file_path && isImage(doc.file_path) && (
         <div className="overflow-hidden rounded-2xl border">
           <img
             src={fileUrl}
@@ -203,11 +235,14 @@ export default function DocumentViewPage() {
         </div>
       )}
 
-      {!isPdf(doc.file_path) && !isImage(doc.file_path) && (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border py-16 text-muted-foreground">
-          <p className="text-sm">{t.docView.noPreview}</p>
-        </div>
-      )}
+      {!isLink &&
+        doc.file_path &&
+        !isPdf(doc.file_path) &&
+        !isImage(doc.file_path) && (
+          <div className="flex flex-col items-center gap-3 rounded-2xl border py-16 text-muted-foreground">
+            <p className="text-sm">{t.docView.noPreview}</p>
+          </div>
+        )}
     </div>
   );
 }
