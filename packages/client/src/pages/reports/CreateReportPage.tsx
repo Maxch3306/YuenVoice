@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowLeft01Icon, Cancel01Icon, Image01Icon } from '@hugeicons/core-free-icons';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { useCreateReport } from '@/services/reports';
 import { useBlocks, useFloors } from '@/services/flats';
+import { useMyFlats } from '@/services/my-flats';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,15 +35,47 @@ export default function CreateReportPage() {
   const createReport = useCreateReport();
   const { data: BLOCKS = [] } = useBlocks();
   const { data: FLOORS = [] } = useFloors();
+  const { data: myFlats = [] } = useMyFlats();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [title, setTitle] = useState('');
   const [type, setType] = useState('');
   const [description, setDescription] = useState('');
-  const [block, setBlock] = useState('');
-  const [floor, setFloor] = useState('');
+  // Null = user hasn't made an explicit choice yet — default to primary.
+  // '_other' = user picked "other location" (block/floor entered manually).
+  const [flatChoice, setFlatChoice] = useState<string | null>(null);
+  // When a flat is picked, block/floor are derived; these states only track
+  // overrides for '_other' or manual edits.
+  const [blockOverride, setBlockOverride] = useState('');
+  const [floorOverride, setFloorOverride] = useState('');
   const [area, setArea] = useState('');
+
+  const effectiveFlatChoice = useMemo(() => {
+    if (flatChoice !== null) return flatChoice;
+    if (myFlats.length === 0) return '_other';
+    const primary = myFlats.find((f) => f.is_primary) ?? myFlats[0];
+    return primary.id;
+  }, [flatChoice, myFlats]);
+
+  const pickedFlat =
+    effectiveFlatChoice === '_other'
+      ? null
+      : myFlats.find((f) => f.id === effectiveFlatChoice) ?? null;
+
+  const block = pickedFlat ? pickedFlat.block : blockOverride;
+  const floor = pickedFlat ? pickedFlat.floor : floorOverride;
+
+  function setBlock(v: string) {
+    // Editing block implicitly switches to "other location" mode.
+    if (pickedFlat) setFlatChoice('_other');
+    setBlockOverride(v);
+  }
+
+  function setFloor(v: string) {
+    if (pickedFlat) setFlatChoice('_other');
+    setFloorOverride(v);
+  }
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -185,6 +218,28 @@ export default function CreateReportPage() {
               )}
             </div>
 
+            {/* Flat picker — only visible when user owns at least one flat. */}
+            {myFlats.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>{t.createReport.fromFlat}</Label>
+                <Select value={effectiveFlatChoice} onValueChange={setFlatChoice}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {myFlats.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.block}{t.common.block} {f.floor}{t.common.floor} {f.unit_number}
+                        {f.is_primary && ` · ${t.myFlats.primaryBadge}`}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="_other">{t.createReport.fromFlatOther}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t.createReport.fromFlatHint}</p>
+              </div>
+            )}
+
             {/* Location */}
             <div className="space-y-1.5">
               <Label>{t.createReport.location}</Label>
@@ -206,6 +261,11 @@ export default function CreateReportPage() {
                     <SelectValue placeholder={t.common.floor} />
                   </SelectTrigger>
                   <SelectContent>
+                    {t.createReport.commonAreas.map((area) => (
+                      <SelectItem key={area.value} value={area.label}>
+                        {area.label}
+                      </SelectItem>
+                    ))}
                     {FLOORS.map((f) => (
                       <SelectItem key={f} value={f}>
                         {f}{t.common.floor}

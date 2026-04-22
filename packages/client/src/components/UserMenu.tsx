@@ -9,6 +9,7 @@ import {
   Moon01Icon,
   Download01Icon,
   LanguageSkillIcon,
+  Home01Icon,
 } from '@hugeicons/core-free-icons';
 import { useAuthStore } from '@/stores/auth-store';
 import { useTheme } from '@/components/theme-provider';
@@ -104,6 +105,10 @@ export default function UserMenu() {
             <span>{t.install.menuItem}</span>
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onClick={() => navigate('/profile/flats')} className="cursor-pointer">
+          <HugeiconsIcon icon={Home01Icon} size={16} />
+          <span>{t.userMenu.myFlats}</span>
+        </DropdownMenuItem>
         {user?.role === 'admin' && (
           <DropdownMenuItem onClick={() => navigate('/admin')} className="cursor-pointer">
             <HugeiconsIcon icon={Settings01Icon} size={16} />

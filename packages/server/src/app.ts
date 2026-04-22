@@ -17,6 +17,7 @@ import discussionRoutes from './routes/discussions.js'
 import ocDocumentRoutes from './routes/oc-documents.js'
 import notificationRoutes from './routes/notifications.js'
 import adminRoutes from './routes/admin.js'
+import userFlatRoutes from './routes/user-flats.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -81,6 +82,9 @@ export async function buildApp() {
 
   // 14. Admin routes
   await app.register(adminRoutes)
+
+  // 15. User-flat linking (owners with multiple units)
+  await app.register(userFlatRoutes)
 
   // ── Flat lookup endpoints (public — used by register + reports) ──
 

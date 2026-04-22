@@ -33,6 +33,9 @@ import DocumentViewPage from '@/pages/oc/DocumentViewPage';
 // Notification pages
 import NotificationCenterPage from '@/pages/notifications/NotificationCenterPage';
 
+// Profile pages
+import MyFlatsPage from '@/pages/profile/MyFlatsPage';
+
 // Admin pages
 import DashboardPage from '@/pages/admin/DashboardPage';
 import UserManagementPage from '@/pages/admin/UserManagementPage';
@@ -118,6 +121,8 @@ export default function App() {
           <Route path="/oc/:id" element={<DocumentViewPage />} />
 
           <Route path="/notifications" element={<NotificationCenterPage />} />
+
+          <Route path="/profile/flats" element={<MyFlatsPage />} />
         </Route>
 
         {/* ── Protected admin routes ─────────────────────────── */}

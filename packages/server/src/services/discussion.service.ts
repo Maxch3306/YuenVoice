@@ -12,6 +12,7 @@ import { saveFile, type FileInput } from '../plugins/upload.js'
 import { logAudit } from '../utils/audit.js'
 import type { PaginationParams } from '../utils/pagination.js'
 import { sanitizeText } from '../utils/sanitize.js'
+import { getOwnedFlatIds } from './user-flat.service.js'
 
 // ── Helpers ──
 
@@ -27,9 +28,10 @@ function maskAuthor(user: { name: string; id: string } | null, isAnonymous: bool
 /**
  * List boards accessible by the user.
  * Admins and management staff see all boards.
- * Residents and OC committee see estate-wide + their block/floor boards.
+ * Residents and OC committee see estate-wide + every (block/floor) pair from
+ * any flat they own (primary + any flats linked via user_flats).
  */
-export async function listBoards(userFlatId: string | null, userRole: string) {
+export async function listBoards(userId: string, userRole: string) {
   const seeAll = userRole === 'admin' || userRole === 'mgmt_staff'
 
   let whereClause: any = {}
@@ -37,18 +39,34 @@ export async function listBoards(userFlatId: string | null, userRole: string) {
   if (!seeAll) {
     const conditions: any[] = [{ scope_type: 'estate' }]
 
-    if (userFlatId) {
-      const flat = await Flat.findByPk(userFlatId, { attributes: ['block', 'floor'] })
-      if (flat) {
-        conditions.push({
-          scope_type: 'block',
-          scope_block: flat.block,
-        })
-        conditions.push({
-          scope_type: 'floor',
-          scope_block: flat.block,
-          scope_floor: flat.floor,
-        })
+    const flatIds = await getOwnedFlatIds(userId)
+    if (flatIds.length > 0) {
+      const flats = await Flat.findAll({
+        where: { id: flatIds },
+        attributes: ['block', 'floor'],
+      })
+
+      // De-dupe block/floor combos — two units on the same floor/block shouldn't
+      // produce duplicate OR clauses.
+      const seenBlocks = new Set<string>()
+      const seenFloors = new Set<string>()
+      for (const flat of flats) {
+        if (!seenBlocks.has(flat.block)) {
+          seenBlocks.add(flat.block)
+          conditions.push({
+            scope_type: 'block',
+            scope_block: flat.block,
+          })
+        }
+        const floorKey = `${flat.block}|${flat.floor}`
+        if (!seenFloors.has(floorKey)) {
+          seenFloors.add(floorKey)
+          conditions.push({
+            scope_type: 'floor',
+            scope_block: flat.block,
+            scope_floor: flat.floor,
+          })
+        }
       }
     }
 

@@ -16,12 +16,27 @@ import { OcDocument } from './oc-document.js'
 import { Notification } from './notification.js'
 import { UserNotification } from './user-notification.js'
 import { AuditLog } from './audit-log.js'
+import { UserFlat } from './user-flat.js'
 
 // ── Associations ──
 
-// Flat ↔ User
+// Flat ↔ User (primary flat set at registration)
 Flat.hasMany(User, { foreignKey: 'flat_id', as: 'residents' })
 User.belongsTo(Flat, { foreignKey: 'flat_id', as: 'flat' })
+
+// User ↔ Flat (additional linked flats — for owners with multiple units)
+User.belongsToMany(Flat, {
+  through: UserFlat,
+  foreignKey: 'user_id',
+  otherKey: 'flat_id',
+  as: 'linkedFlats',
+})
+Flat.belongsToMany(User, {
+  through: UserFlat,
+  foreignKey: 'flat_id',
+  otherKey: 'user_id',
+  as: 'linkedUsers',
+})
 
 // User ↔ IncidentReport
 User.hasMany(IncidentReport, { foreignKey: 'reporter_id', as: 'reports' })
@@ -103,4 +118,5 @@ export {
   Notification,
   UserNotification,
   AuditLog,
+  UserFlat,
 }

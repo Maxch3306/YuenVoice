@@ -97,7 +97,7 @@ export default async function discussionRoutes(fastify: FastifyInstance) {
       preHandler: [fastify.authenticate],
     },
     async (request, reply) => {
-      const boards = await discussionService.listBoards(request.user.flatId, request.user.role)
+      const boards = await discussionService.listBoards(request.user.id, request.user.role)
       return reply.send({ data: boards })
     },
   )
