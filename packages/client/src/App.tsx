@@ -32,6 +32,7 @@ import DocumentViewPage from '@/pages/oc/DocumentViewPage';
 
 // Notification pages
 import NotificationCenterPage from '@/pages/notifications/NotificationCenterPage';
+import ComposeNotificationPage from '@/pages/notifications/ComposeNotificationPage';
 
 // Profile pages
 import MyFlatsPage from '@/pages/profile/MyFlatsPage';
@@ -121,6 +122,7 @@ export default function App() {
           <Route path="/oc/:id" element={<DocumentViewPage />} />
 
           <Route path="/notifications" element={<NotificationCenterPage />} />
+          <Route path="/notifications/compose" element={<ComposeNotificationPage />} />
 
           <Route path="/profile/flats" element={<MyFlatsPage />} />
         </Route>

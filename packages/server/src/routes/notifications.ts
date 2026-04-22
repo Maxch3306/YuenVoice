@@ -62,6 +62,63 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     }
   )
 
+  // POST /api/notifications/:id/resend — re-push existing notification (mgmt/admin)
+  // No new Notification row is created; web push + realtime ping fire again.
+  fastify.post(
+    '/api/notifications/:id/resend',
+    {
+      preHandler: [fastify.authenticate, fastify.rbac(['mgmt_staff', 'admin'])],
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', maxLength: 200 },
+            body: { type: 'string', maxLength: 2000 },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const body = request.body as { title?: string; body?: string } | undefined
+      const result = await notificationService.resend(id, body, fastify.redis)
+      return reply.send({
+        id: result.notification.id,
+        targetCount: result.targetCount,
+      })
+    },
+  )
+
+  // GET /api/notifications/:id — single notification (mgmt/admin, for compose prefill)
+  fastify.get(
+    '/api/notifications/:id',
+    {
+      preHandler: [fastify.authenticate, fastify.rbac(['mgmt_staff', 'admin'])],
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const notification = await notificationService.getById(id)
+      if (!notification) {
+        return reply.status(404).send({ error: 'Notification not found' })
+      }
+      return notification
+    },
+  )
+
   // GET /api/notifications — current user's notifications (paginated)
   fastify.get(
     '/api/notifications',

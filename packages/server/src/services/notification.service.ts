@@ -98,6 +98,81 @@ export async function send(
   return { notification, targetCount: targetUserIds.length }
 }
 
+/**
+ * Re-push an existing notification to its original recipients. Does NOT
+ * create new Notification/UserNotification rows — simply triggers another
+ * web push and realtime ping. Intended for reminders ("meeting tonight").
+ *
+ * Caller may override the push title/body. Empty/undefined overrides fall
+ * back to the original notification text.
+ */
+export async function resend(
+  notificationId: string,
+  overrides: { title?: string; body?: string } | undefined,
+  redis: Redis,
+): Promise<{ notification: Notification; targetCount: number }> {
+  const notification = await Notification.findByPk(notificationId)
+  if (!notification) {
+    throw Object.assign(new Error('Notification not found'), { statusCode: 404 })
+  }
+
+  const rows = await UserNotification.findAll({
+    where: { notification_id: notificationId },
+    attributes: ['user_id'],
+  })
+  const targetUserIds = rows.map((r) => r.user_id)
+
+  const pushTitle = overrides?.title?.trim()
+    ? sanitizeText(overrides.title.trim())
+    : notification.title
+  const pushBody = overrides?.body?.trim()
+    ? sanitizeText(overrides.body.trim())
+    : notification.body
+
+  // Realtime ping (fire-and-forget)
+  for (const userId of targetUserIds) {
+    redis
+      .publish(
+        `notify:user:${userId}`,
+        JSON.stringify({
+          id: notification.id,
+          title: pushTitle,
+          body: pushBody,
+          category: notification.category,
+          resend: true,
+        }),
+      )
+      .catch(() => {})
+  }
+
+  // Web push (fire-and-forget)
+  pushService
+    .sendToUsers(redis, targetUserIds, {
+      title: pushTitle,
+      body: pushBody,
+      category: notification.category,
+    })
+    .catch(() => {})
+
+  return { notification, targetCount: targetUserIds.length }
+}
+
+/**
+ * Load a single notification (shape only — no per-user read state). Used by
+ * the compose/reminder flow to pre-fill a form from a previous notification.
+ */
+export async function getById(notificationId: string): Promise<Notification | null> {
+  return Notification.findByPk(notificationId, {
+    include: [
+      {
+        model: User,
+        as: 'sender',
+        attributes: ['id', 'name'],
+      },
+    ],
+  })
+}
+
 export async function listForUser(
   userId: string,
   filters: ListNotificationFilters

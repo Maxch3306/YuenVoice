@@ -1,16 +1,25 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { Notification01Icon, Notification03Icon } from '@hugeicons/core-free-icons';
+import {
+  Notification01Icon,
+  Notification03Icon,
+  Sent02Icon,
+  Edit02Icon,
+  Repeat01Icon,
+} from '@hugeicons/core-free-icons';
 
 import {
   getNotifications,
   markAsRead as markAsReadApi,
   markAllAsRead as markAllAsReadApi,
+  resendNotification,
   subscribePush,
 } from '@/services/notifications';
 import { isPushSupported, requestPushPermission, subscribeToPush } from '@/lib/push';
 import api from '@/lib/api';
+import { useAuthStore } from '@/stores/auth-store';
 import { useNotificationStore } from '@/stores/notification-store';
 import { useT } from '@/lib/i18n';
 import type { NotificationCategory, UserNotification } from '@/types';
@@ -18,8 +27,20 @@ import type { NotificationCategory, UserNotification } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 
 const categoryStyleMap: Record<NotificationCategory, string> = {
@@ -29,10 +50,23 @@ const categoryStyleMap: Record<NotificationCategory, string> = {
 };
 
 export default function NotificationCenterPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const storeMarkAsRead = useNotificationStore((s) => s.markAsRead);
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
+  const user = useAuthStore((s) => s.user);
+  const canCompose = user?.role === 'mgmt_staff' || user?.role === 'admin';
   const t = useT();
+
+  // Resend dialog state — one dialog shared across list items.
+  const [resendTarget, setResendTarget] = useState<{
+    id: string
+    title: string
+  } | null>(null);
+  const [resendTitleOverride, setResendTitleOverride] = useState('');
+  const [resendBodyOverride, setResendBodyOverride] = useState('');
+  const [resendError, setResendError] = useState('');
+  const [resendSuccess, setResendSuccess] = useState<number | null>(null);
 
   const categoryConfig: Record<
     NotificationCategory,
@@ -129,6 +163,45 @@ export default function NotificationCenterPage() {
     },
   });
 
+  const resendMutation = useMutation({
+    mutationFn: async (args: {
+      id: string
+      title?: string
+      body?: string
+    }) => resendNotification(args.id, { title: args.title, body: args.body }),
+    onSuccess: (result) => {
+      setResendSuccess(result.targetCount);
+      setResendError('');
+      // Auto-close after a short confirmation.
+      setTimeout(() => {
+        setResendTarget(null);
+        setResendTitleOverride('');
+        setResendBodyOverride('');
+        setResendSuccess(null);
+      }, 1500);
+    },
+    onError: () => {
+      setResendError(t.notifications.resendFailed);
+    },
+  });
+
+  function openResend(id: string, title: string) {
+    setResendTarget({ id, title });
+    setResendTitleOverride('');
+    setResendBodyOverride('');
+    setResendError('');
+    setResendSuccess(null);
+  }
+
+  function confirmResend() {
+    if (!resendTarget) return;
+    resendMutation.mutate({
+      id: resendTarget.id,
+      title: resendTitleOverride.trim() || undefined,
+      body: resendBodyOverride.trim() || undefined,
+    });
+  }
+
   function handleNotificationClick(notification: UserNotification) {
     if (!notification.is_read) {
       markReadMutation.mutate(notification.id);
@@ -143,7 +216,15 @@ export default function NotificationCenterPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4">
-      <h1 className="mb-6 text-2xl font-bold">{t.notifications.title}</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">{t.notifications.title}</h1>
+        {canCompose && (
+          <Button onClick={() => navigate('/notifications/compose')}>
+            <HugeiconsIcon icon={Sent02Icon} size={16} />
+            <span className="ml-1.5">{t.notifications.compose}</span>
+          </Button>
+        )}
+      </div>
 
       {/* Controls */}
       <div className="mb-4 flex items-center justify-between">
@@ -274,6 +355,34 @@ export default function NotificationCenterPage() {
                       {' \u00B7 '}
                       {notif ? relativeTime(notif.created_at) : ''}
                     </p>
+
+                    {/* Mgmt/admin actions — reminder via new notification OR re-push original */}
+                    {canCompose && notif && (
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/notifications/compose?fromId=${notif.id}`);
+                          }}
+                        >
+                          <HugeiconsIcon icon={Edit02Icon} size={14} />
+                          <span className="ml-1">{t.notifications.remind}</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openResend(notif.id, notif.title);
+                          }}
+                        >
+                          <HugeiconsIcon icon={Repeat01Icon} size={14} />
+                          <span className="ml-1">{t.notifications.resend}</span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -281,6 +390,65 @@ export default function NotificationCenterPage() {
           })}
         </div>
       )}
+
+      {/* Re-push dialog — mgmt/admin only */}
+      <AlertDialog
+        open={!!resendTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setResendTarget(null);
+            setResendTitleOverride('');
+            setResendBodyOverride('');
+            setResendError('');
+            setResendSuccess(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.notifications.resendConfirmTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.notifications.resendConfirmBody}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3">
+            <Label className="text-xs text-muted-foreground">
+              {t.notifications.resendOptionalPrefix}
+            </Label>
+            <Input
+              value={resendTitleOverride}
+              onChange={(e) => setResendTitleOverride(e.target.value)}
+              placeholder={resendTarget?.title ?? ''}
+              maxLength={200}
+            />
+            <Textarea
+              value={resendBodyOverride}
+              onChange={(e) => setResendBodyOverride(e.target.value)}
+              rows={3}
+              maxLength={2000}
+            />
+            {resendError && (
+              <p className="text-sm text-destructive">{resendError}</p>
+            )}
+            {resendSuccess !== null && (
+              <p className="text-sm text-primary">
+                {t.notifications.resent} ({t.compose.sentCount(resendSuccess)})
+              </p>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmResend}
+              disabled={resendMutation.isPending}
+            >
+              {resendMutation.isPending ? t.common.sending : t.common.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Load More */}
       {hasMore && (
