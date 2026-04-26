@@ -7,7 +7,7 @@ import {
   Notification03Icon,
   Sent02Icon,
   Edit02Icon,
-  Repeat01Icon,
+  RepeatIcon,
 } from '@hugeicons/core-free-icons';
 
 import {
@@ -378,7 +378,7 @@ export default function NotificationCenterPage() {
                             openResend(notif.id, notif.title);
                           }}
                         >
-                          <HugeiconsIcon icon={Repeat01Icon} size={14} />
+                          <HugeiconsIcon icon={RepeatIcon} size={14} />
                           <span className="ml-1">{t.notifications.resend}</span>
                         </Button>
                       </div>
