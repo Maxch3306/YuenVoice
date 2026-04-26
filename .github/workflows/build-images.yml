@@ -9,7 +9,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BASE: ghcr.io/tsuininggarden/yuenvoice
+  # GHCR namespace must match the repo owner so the auto-issued GITHUB_TOKEN
+  # has write:packages scope. Lowercased — GHCR rejects mixed-case namespaces.
+  IMAGE_BASE: ghcr.io/maxch3306/yuenvoice
 
 permissions:
   contents: read
