@@ -215,7 +215,12 @@ export async function updateStatus(
 
 /**
  * Add a comment to a report.
- * isInternal is only respected for mgmt/admin; forced to false for others.
+ *
+ * - isInternal is only respected for mgmt/admin; forced to false for others.
+ * - If a non-mgmt user (typically the reporter) comments on an already
+ *   `completed` report, automatically transition it back to `in_progress`.
+ *   The implicit signal is "the issue isn't actually resolved", so mgmt
+ *   should see the ticket back in their active queue.
  */
 export async function addComment(
   reportId: string,
@@ -240,6 +245,16 @@ export async function addComment(
     content: sanitizeText(content),
     is_internal: internalFlag,
   })
+
+  // Auto-reopen completed reports on a resident's follow-up comment.
+  if (!isMgmt && report.status === 'completed') {
+    report.status = 'in_progress'
+    await report.save()
+
+    await logAudit(userId, 'auto_reopen', 'incident_report', reportId, {
+      reason: 'resident_comment_on_completed',
+    })
+  }
 
   return comment
 }
