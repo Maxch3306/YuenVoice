@@ -7,6 +7,7 @@ import {
   User,
   Notification,
   UserNotification,
+  AuditLog,
 } from '../models/index.js'
 import { parsePagination, paginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
@@ -258,7 +259,22 @@ export async function addComment(
       reason: 'resident_comment_on_completed',
     })
 
+    const reopenCount = await AuditLog.count({
+      where: {
+        action: 'auto_reopen',
+        entity_type: 'incident_report',
+        entity_id: reportId,
+      },
+    })
+
     await notifyMgmtOfReopen(report, userId, redis)
+
+    // Escalate to OC committee once a ticket has bounced back 3+ times — the
+    // committee is review-only on reports, but persistent reopens signal an
+    // unresolved issue that warrants their attention.
+    if (reopenCount >= 3) {
+      await notifyCommitteeOfRepeatedReopen(report, userId, redis, reopenCount)
+    }
   }
 
   return comment
@@ -301,6 +317,58 @@ async function notifyMgmtOfReopen(
         .sendToUsers(
           redis,
           mgmtUsers.map((u) => u.id),
+          {
+            title: notification.title,
+            body: notification.body,
+            category: notification.category,
+          },
+        )
+        .catch(() => {})
+    }
+  } catch {
+    // Fire-and-forget: never fail the comment creation because of notification
+    // bookkeeping.
+  }
+}
+
+/**
+ * Fan out an escalation notification to every oc_committee user when a report
+ * has been reopened 3 or more times. Sent on the 3rd reopen and every later
+ * reopen so the committee sees ongoing escalation. Fire-and-forget.
+ */
+async function notifyCommitteeOfRepeatedReopen(
+  report: IncidentReport,
+  triggeredByUserId: string,
+  redis: Redis | undefined,
+  reopenCount: number,
+): Promise<void> {
+  try {
+    const committeeUsers = await User.findAll({
+      where: { is_active: true, role: 'oc_committee' },
+      attributes: ['id'],
+    })
+    if (committeeUsers.length === 0) return
+
+    const notification = await Notification.create({
+      sender_id: triggeredByUserId,
+      title: '事件報告多次重新開啟',
+      body: `「${report.title}」已被重新開啟 ${reopenCount} 次，請委員留意此跟進情況`,
+      category: 'urgent',
+      target_type: 'all',
+    })
+
+    await UserNotification.bulkCreate(
+      committeeUsers.map((u) => ({
+        notification_id: notification.id,
+        user_id: u.id,
+      })),
+    )
+
+    if (redis) {
+      pushService
+        .sendToUsers(
+          redis,
+          committeeUsers.map((u) => u.id),
           {
             title: notification.title,
             body: notification.body,
