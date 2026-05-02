@@ -286,6 +286,11 @@ function CommentsSection({ report, t }: { report: IncidentReport; t: Translation
 
         {/* Add comment form */}
         <form onSubmit={handleSubmit} className="space-y-2">
+          {!mgmt && report.status === 'completed' && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              {t.reportDetail.reopenHint}
+            </p>
+          )}
           <Textarea
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}

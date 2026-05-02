@@ -279,6 +279,7 @@ const zh = {
     markResolved: '標記完成',
     resolvedMessage: '此報告已處理完成。',
     description: '詳細描述',
+    reopenHint: '提交留言會將此報告重新開啟並通知管理處',
   },
   boards: {
     title: '討論區',
@@ -822,6 +823,7 @@ const en: Translations = {
     markResolved: 'Mark Resolved',
     resolvedMessage: 'This report has been resolved.',
     description: 'Description',
+    reopenHint: 'Submitting a comment will reopen this report and notify management',
   },
   boards: {
     title: 'Discussion Boards',
