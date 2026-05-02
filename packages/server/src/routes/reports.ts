@@ -131,7 +131,11 @@ interface AddCommentBody {
 // ── Route Plugin ──
 
 export default async function reportRoutes(fastify: FastifyInstance) {
+  // oc_committee is review-only on reports — they may read every ticket and the
+  // mgmt responses, but cannot file, comment, or attach. mgmt/admin retain
+  // full write access; residents file and follow up on their own tickets.
   const reporterRoles = ['resident', 'mgmt_staff', 'admin']
+  const writerRoles = ['resident', 'mgmt_staff', 'admin']
   const mgmtRoles = ['mgmt_staff', 'admin']
 
   // POST /api/reports — create report (multipart: fields + optional attachments)
@@ -242,12 +246,12 @@ export default async function reportRoutes(fastify: FastifyInstance) {
     }
   )
 
-  // POST /api/reports/:id/comments — add comment
+  // POST /api/reports/:id/comments — add comment (committee blocked)
   fastify.post<{ Params: ReportIdParams; Body: AddCommentBody }>(
     '/:id/comments',
     {
       schema: addCommentSchema,
-      preHandler: [fastify.authenticate],
+      preHandler: [fastify.authenticate, fastify.rbac(writerRoles)],
     },
     async (request, reply) => {
       const { id: userId, role } = request.user
@@ -270,12 +274,12 @@ export default async function reportRoutes(fastify: FastifyInstance) {
     }
   )
 
-  // POST /api/reports/:id/attachments — upload attachments
+  // POST /api/reports/:id/attachments — upload attachments (committee blocked)
   fastify.post<{ Params: ReportIdParams }>(
     '/:id/attachments',
     {
       schema: attachmentsParamsSchema,
-      preHandler: [fastify.authenticate],
+      preHandler: [fastify.authenticate, fastify.rbac(writerRoles)],
     },
     async (request, reply) => {
       const parts = request.files()

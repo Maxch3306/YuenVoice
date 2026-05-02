@@ -127,13 +127,14 @@ export default async function discussionRoutes(fastify: FastifyInstance) {
     },
   )
 
-  // POST /api/boards/:id/posts — create post (multipart)
+  // POST /api/boards/:id/posts — create post (multipart). oc_committee is
+  // review-only and cannot author posts; they keep read access via GET routes.
   fastify.post<{ Params: IdParams }>(
     `${prefix}/boards/:id/posts`,
     {
       preHandler: [
         fastify.authenticate,
-        fastify.rbac(['resident', 'oc_committee', 'mgmt_staff', 'admin']),
+        fastify.rbac(['resident', 'mgmt_staff', 'admin']),
       ],
       config: {
         rateLimit: {
@@ -202,11 +203,14 @@ export default async function discussionRoutes(fastify: FastifyInstance) {
     },
   )
 
-  // POST /api/posts/:id/comments — add comment
+  // POST /api/posts/:id/comments — add comment. Committee is review-only.
   fastify.post<{ Params: IdParams; Body: CommentBody }>(
     `${prefix}/posts/:id/comments`,
     {
-      preHandler: [fastify.authenticate],
+      preHandler: [
+        fastify.authenticate,
+        fastify.rbac(['resident', 'mgmt_staff', 'admin']),
+      ],
       schema: {
         params: idParamsSchema,
         body: commentBodySchema,
