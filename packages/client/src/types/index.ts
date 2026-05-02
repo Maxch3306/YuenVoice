@@ -7,7 +7,7 @@ export interface User {
   email: string;
   phone: string | null;
   name: string;
-  flat_id: string;
+  flat_id: string | null;
   role: UserRole;
   is_active: boolean;
   created_at: string;

@@ -1,17 +1,31 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { Search01Icon } from '@hugeicons/core-free-icons';
+import {
+  Search01Icon,
+  Add01Icon,
+  Copy01Icon,
+} from '@hugeicons/core-free-icons';
 
-import { getUsers, updateRole, updateStatus } from '@/services/admin';
+import { createUser, getUsers, updateRole, updateStatus } from '@/services/admin';
 import { useT } from '@/lib/i18n';
 import type { UserRole } from '@/types';
 
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -76,6 +90,41 @@ export default function UserManagementPage() {
     newStatus: boolean;
   } | null>(null);
 
+  // Create-user dialog state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formName, setFormName] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formRole, setFormRole] = useState<UserRole>('mgmt_staff');
+  const [formError, setFormError] = useState('');
+
+  // One-time password reveal after successful creation
+  const [tempPasswordDialog, setTempPasswordDialog] = useState<{
+    name: string;
+    email: string;
+    tempPassword: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function openCreateDialog() {
+    setFormName('');
+    setFormEmail('');
+    setFormPhone('');
+    setFormRole('mgmt_staff');
+    setFormError('');
+    setCreateOpen(true);
+  }
+
+  async function handleCopy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  }
+
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'users', search, roleFilter, page],
     queryFn: () =>
@@ -93,6 +142,29 @@ export default function UserManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       setRoleDialog(null);
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createUser({
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim() || undefined,
+        role: formRole,
+      }),
+    onSuccess: ({ user, tempPassword }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      setCreateOpen(false);
+      setTempPasswordDialog({
+        name: user.name,
+        email: user.email,
+        tempPassword,
+      });
+    },
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      setFormError(axiosErr.response?.data?.error ?? '建立失敗');
     },
   });
 
@@ -116,7 +188,13 @@ export default function UserManagementPage() {
 
   return (
     <div className="p-4 lg:p-6">
-      <h1 className="mb-6 text-2xl font-bold">{t.adminUsers.title}</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">{t.adminUsers.title}</h1>
+        <Button size="sm" onClick={openCreateDialog}>
+          <HugeiconsIcon icon={Add01Icon} size={16} />
+          <span className="ml-1">{t.adminUsers.addUser}</span>
+        </Button>
+      </div>
 
       {/* Controls */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -346,6 +424,160 @@ export default function UserManagementPage() {
           </Button>
         </div>
       )}
+
+      {/* Create User Dialog */}
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!open) setCreateOpen(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t.adminUsers.createTitle}</DialogTitle>
+            <DialogDescription>{t.adminUsers.createHint}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="create-user-name">{t.adminUsers.nameLabel}</Label>
+              <Input
+                id="create-user-name"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="create-user-email">{t.adminUsers.emailLabel}</Label>
+              <Input
+                id="create-user-email"
+                type="email"
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="create-user-phone">{t.adminUsers.phoneLabel}</Label>
+              <Input
+                id="create-user-phone"
+                value={formPhone}
+                onChange={(e) => setFormPhone(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t.adminUsers.roleSelectLabel}</Label>
+              <Select
+                value={formRole}
+                onValueChange={(v) => setFormRole(v as UserRole)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(['mgmt_staff', 'oc_committee', 'admin'] as UserRole[]).map(
+                    (value) => (
+                      <SelectItem key={value} value={value}>
+                        {roleLabels[value]}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              {t.common.cancel}
+            </Button>
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={
+                createMutation.isPending ||
+                !formName.trim() ||
+                !formEmail.trim()
+              }
+            >
+              {createMutation.isPending ? t.common.creating : t.adminUsers.create}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Temp password reveal (one-time) */}
+      <Dialog
+        open={!!tempPasswordDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTempPasswordDialog(null);
+            setCopied(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t.adminUsers.userCreated}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {tempPasswordDialog?.name} · {tempPasswordDialog?.email}
+            </p>
+
+            <div>
+              <Label className="mb-1 text-xs text-muted-foreground">
+                {t.adminUsers.tempPasswordLabel}
+              </Label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 rounded-md bg-muted px-4 py-3 font-mono text-lg tracking-widest">
+                  {tempPasswordDialog?.tempPassword}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    tempPasswordDialog &&
+                    handleCopy(tempPasswordDialog.tempPassword)
+                  }
+                >
+                  <HugeiconsIcon icon={Copy01Icon} size={18} />
+                </Button>
+              </div>
+              {copied && (
+                <p className="mt-1 text-xs text-green-600">
+                  {t.common.copiedToClipboard}
+                </p>
+              )}
+            </div>
+
+            <Alert>
+              <AlertDescription className="text-sm">
+                {t.adminUsers.tempPasswordNote}
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setTempPasswordDialog(null);
+                setCopied(false);
+              }}
+            >
+              {t.common.confirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Role Change Confirmation */}
       <AlertDialog

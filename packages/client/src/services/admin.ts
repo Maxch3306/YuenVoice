@@ -26,6 +26,24 @@ export async function getUsers(
   return data;
 }
 
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  phone?: string;
+  role: UserRole;
+  flatId?: string;
+}
+
+export async function createUser(
+  input: CreateUserInput,
+): Promise<{ user: User; tempPassword: string }> {
+  const { data } = await api.post<{ user: User; tempPassword: string }>(
+    '/api/admin/users',
+    input,
+  );
+  return data;
+}
+
 export async function updateRole(
   userId: string,
   role: UserRole,

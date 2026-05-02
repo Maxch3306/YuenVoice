@@ -3,6 +3,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { User, Flat, AuditLog, IncidentReport, DiscussionPost, OcDocument } from '../models/index.js'
 import { parsePagination, paginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
+import { hashPassword } from '../utils/hash.js'
+import { sanitizeText } from '../utils/sanitize.js'
 import { randomBytes } from 'node:crypto'
 
 const ROLES = ['resident', 'oc_committee', 'mgmt_staff', 'admin'] as const
@@ -80,6 +82,86 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       })
 
       return paginatedResponse(rows, count, page, limit)
+    }
+  )
+
+  // POST /api/admin/users — create a user (mgmt_staff / oc_committee / admin
+  // typically have no flat; resident must have a flatId). Returns a one-time
+  // temporary password that admin must record and share privately.
+  fastify.post(
+    '/api/admin/users',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name', 'email', 'role'],
+          properties: {
+            name: { type: 'string', minLength: 1 },
+            email: { type: 'string', format: 'email' },
+            phone: { type: 'string' },
+            role: { type: 'string', enum: [...ROLES] },
+            flatId: { type: 'string', format: 'uuid' },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Body: {
+          name: string
+          email: string
+          phone?: string
+          role: (typeof ROLES)[number]
+          flatId?: string
+        }
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { name, email, phone, role, flatId } = request.body
+
+      if (role === 'resident' && !flatId) {
+        return reply.status(400).send({ error: '住戶必須連結單位' })
+      }
+
+      const existing = await User.findOne({ where: { email } })
+      if (existing) {
+        return reply.status(409).send({ error: '此電郵已被使用' })
+      }
+
+      let flat: Flat | null = null
+      if (flatId) {
+        flat = await Flat.findByPk(flatId)
+        if (!flat) {
+          return reply.status(400).send({ error: '單位不存在' })
+        }
+      }
+
+      const tempPassword = randomBytes(6).toString('base64url')
+      const passwordHash = await hashPassword(tempPassword)
+
+      const user = await User.create({
+        email,
+        phone: phone ?? null,
+        password_hash: passwordHash,
+        name: sanitizeText(name),
+        flat_id: flat?.id ?? null,
+        role,
+      })
+
+      await logAudit(request.user.id, 'create_user', 'user', user.id, {
+        email,
+        role,
+        flat_id: flat?.id ?? null,
+      })
+
+      const { password_hash: _ignored, ...safeUser } = user.toJSON() as any
+      void _ignored
+
+      return reply.status(201).send({
+        user: { ...safeUser, flat: flat?.toJSON() ?? null },
+        tempPassword,
+      })
     }
   )
 
