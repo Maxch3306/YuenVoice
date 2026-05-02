@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePosts, useBoards } from '@/services/discussions';
+import { useAuthStore } from '@/stores/auth-store';
 import { useT } from '@/lib/i18n';
 import type { DiscussionPost } from '@/types';
 
@@ -99,6 +100,9 @@ export default function PostListPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const t = useT();
+
+  const userRole = useAuthStore((s) => s.user?.role);
+  const canCreate = userRole !== 'oc_committee';
 
   const { data: boards } = useBoards();
   const board = boards?.find((b) => b.id === boardId);
@@ -201,15 +205,17 @@ export default function PostListPage() {
         </div>
       )}
 
-      {/* FAB */}
-      <Button
-        className="fixed bottom-20 right-4 z-30 h-14 w-14 rounded-full shadow-lg md:bottom-6"
-        size="icon-lg"
-        onClick={() => navigate(`/discussion/${boardId}/new`)}
-        aria-label={t.posts.newPost}
-      >
-        <HugeiconsIcon icon={PlusSignIcon} size={24} />
-      </Button>
+      {/* FAB — hidden for committee (review-only role) */}
+      {canCreate && (
+        <Button
+          className="fixed bottom-20 right-4 z-30 h-14 w-14 rounded-full shadow-lg md:bottom-6"
+          size="icon-lg"
+          onClick={() => navigate(`/discussion/${boardId}/new`)}
+          aria-label={t.posts.newPost}
+        >
+          <HugeiconsIcon icon={PlusSignIcon} size={24} />
+        </Button>
+      )}
     </div>
   );
 }

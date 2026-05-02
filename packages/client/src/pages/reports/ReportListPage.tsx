@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import type { Translations } from '@/lib/translations';
 import { useReports, type ReportFilters } from '@/services/reports';
+import { useAuthStore } from '@/stores/auth-store';
 import type { ReportStatus, ReportType, IncidentReport } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -72,6 +73,9 @@ export default function ReportListPage() {
     { value: 'in_progress', label: t.reportStatus.in_progress },
     { value: 'completed', label: t.reportStatus.resolved },
   ];
+
+  const userRole = useAuthStore((s) => s.user?.role);
+  const canCreate = userRole !== 'oc_committee';
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -259,14 +263,16 @@ export default function ReportListPage() {
         </div>
       )}
 
-      {/* FAB */}
-      <Button
-        className="fixed bottom-20 right-4 z-50 h-14 w-14 rounded-full shadow-lg"
-        onClick={() => navigate('/reports/new')}
-      >
-        <HugeiconsIcon icon={Add01Icon} className="size-6" />
-        <span className="sr-only">{t.reports.newReport}</span>
-      </Button>
+      {/* FAB — hidden for committee (review-only role) */}
+      {canCreate && (
+        <Button
+          className="fixed bottom-20 right-4 z-50 h-14 w-14 rounded-full shadow-lg"
+          onClick={() => navigate('/reports/new')}
+        >
+          <HugeiconsIcon icon={Add01Icon} className="size-6" />
+          <span className="sr-only">{t.reports.newReport}</span>
+        </Button>
+      )}
     </div>
   );
 }

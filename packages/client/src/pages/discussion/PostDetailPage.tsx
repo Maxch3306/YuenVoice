@@ -355,6 +355,7 @@ export default function PostDetailPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const isMgmt = user?.role === 'mgmt_staff' || user?.role === 'admin';
+  const isCommittee = user?.role === 'oc_committee';
 
   const reactions = post?.reactions ?? [];
   const reactionCount = reactions.length;
@@ -516,8 +517,8 @@ export default function PostDetailPage() {
         ))}
       </div>
 
-      {/* Add Comment */}
-      <AddCommentForm postId={post.id} />
+      {/* Add Comment — committee is review-only */}
+      {!isCommittee && <AddCommentForm postId={post.id} />}
     </div>
   );
 }

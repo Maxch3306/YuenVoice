@@ -244,6 +244,7 @@ function CommentsSection({ report, t }: { report: IncidentReport; t: Translation
 
   const comments = report.comments ?? [];
   const mgmt = isMgmt(user?.role);
+  const isCommittee = user?.role === 'oc_committee';
 
   // Filter internal comments for non-mgmt users
   const visibleComments = mgmt
@@ -282,6 +283,9 @@ function CommentsSection({ report, t }: { report: IncidentReport; t: Translation
           <CommentCard key={comment.id} comment={comment} t={t} />
         ))}
 
+        {/* Committee is review-only — no Separator + form below */}
+        {isCommittee ? null : (
+          <>
         <Separator />
 
         {/* Add comment form */}
@@ -322,6 +326,8 @@ function CommentsSection({ report, t }: { report: IncidentReport; t: Translation
             </Button>
           </div>
         </form>
+          </>
+        )}
       </CardContent>
     </Card>
   );
