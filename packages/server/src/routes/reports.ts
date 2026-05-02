@@ -258,7 +258,8 @@ export default async function reportRoutes(fastify: FastifyInstance) {
         userId,
         role,
         content,
-        isInternal ?? false
+        isInternal ?? false,
+        fastify.redis,
       )
 
       if (!comment) {

@@ -1,4 +1,5 @@
 import { Op, type WhereOptions } from 'sequelize'
+import type Redis from 'ioredis'
 import {
   IncidentReport,
   IncidentAttachment,
@@ -11,6 +12,7 @@ import { parsePagination, paginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
 import { saveFile, type SaveFileResult, type FileInput } from '../plugins/upload.js'
 import { sanitizeText } from '../utils/sanitize.js'
+import * as pushService from './push.service.js'
 
 // ── Types ──
 
@@ -218,16 +220,17 @@ export async function updateStatus(
  *
  * - isInternal is only respected for mgmt/admin; forced to false for others.
  * - If a non-mgmt user (typically the reporter) comments on an already
- *   `completed` report, automatically transition it back to `in_progress`.
- *   The implicit signal is "the issue isn't actually resolved", so mgmt
- *   should see the ticket back in their active queue.
+ *   `completed` report, automatically transition it back to `in_progress`,
+ *   write an audit entry, and notify every mgmt_staff/admin user via DB
+ *   notification + web push (when redis is supplied).
  */
 export async function addComment(
   reportId: string,
   userId: string,
   role: string,
   content: string,
-  isInternal: boolean
+  isInternal: boolean,
+  redis?: Redis,
 ) {
   // Verify report exists
   const report = await IncidentReport.findByPk(reportId)
@@ -254,9 +257,62 @@ export async function addComment(
     await logAudit(userId, 'auto_reopen', 'incident_report', reportId, {
       reason: 'resident_comment_on_completed',
     })
+
+    await notifyMgmtOfReopen(report, userId, redis)
   }
 
   return comment
+}
+
+/**
+ * Fan out a "ticket reopened" notification to every mgmt_staff/admin user.
+ * Fire-and-forget — never propagates failures (a missing push subscription
+ * shouldn't break commenting).
+ */
+async function notifyMgmtOfReopen(
+  report: IncidentReport,
+  triggeredByUserId: string,
+  redis: Redis | undefined,
+): Promise<void> {
+  try {
+    const mgmtUsers = await User.findAll({
+      where: { is_active: true, role: { [Op.in]: ['mgmt_staff', 'admin'] } },
+      attributes: ['id'],
+    })
+    if (mgmtUsers.length === 0) return
+
+    const notification = await Notification.create({
+      sender_id: triggeredByUserId,
+      title: '事件報告重新開啟',
+      body: `業主已留言，「${report.title}」重新開啟跟進`,
+      category: 'general',
+      target_type: 'all',
+    })
+
+    await UserNotification.bulkCreate(
+      mgmtUsers.map((u) => ({
+        notification_id: notification.id,
+        user_id: u.id,
+      })),
+    )
+
+    if (redis) {
+      pushService
+        .sendToUsers(
+          redis,
+          mgmtUsers.map((u) => u.id),
+          {
+            title: notification.title,
+            body: notification.body,
+            category: notification.category,
+          },
+        )
+        .catch(() => {})
+    }
+  } catch {
+    // Fire-and-forget: never fail the comment creation because of notification
+    // bookkeeping.
+  }
 }
 
 /**
