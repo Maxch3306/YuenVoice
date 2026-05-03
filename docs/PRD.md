@@ -1,7 +1,7 @@
 # YUENVOICE — Product Requirements Document
 
-> Version: 1.0
-> Last Updated: 2026-03-28
+> Version: 1.1
+> Last Updated: 2026-05-02
 
 ---
 
@@ -86,21 +86,33 @@ Each flat (unit) in the estate is pre-assigned a unique **registration password 
 
 ### 4.2 Permission Matrix / 權限矩陣
 
+OC committee is **review-only** on residents' tickets and the discussion board: they observe everything mgmt sees on the report side, but cannot create or comment. They retain full read access plus reactions and post flags so they can still acknowledge content and escalate it for moderation. Their write capability is limited to the OC document hub (their statutory role).
+
 | Feature | Resident | OC Committee | Mgmt Staff | Admin |
 |---------|----------|-------------|------------|-------|
-| Submit incident report | Yes | Yes | Yes | Yes |
-| View own reports | Yes | Yes | Yes | Yes |
-| View all reports | — | — | Yes | Yes |
+| Submit incident report | Yes | — (review-only) | Yes | Yes |
+| View own reports | Yes | — | Yes | Yes |
+| View all reports | — | Yes (read-only) | Yes | Yes |
+| Comment on report | Yes (own) | — (review-only) | Yes (incl. internal notes) | Yes |
+| Attach files to report | Yes | — | Yes | Yes |
 | Update report status | — | — | Yes | Yes |
-| Create discussion post | Yes | Yes | Yes | Yes |
-| Post anonymously | Yes | Yes | — | — |
-| Moderate discussions | — | — | Yes | Yes |
+| View internal mgmt notes | — | — | Yes | Yes |
+| Create discussion post | Yes | — (review-only) | Yes | Yes |
+| Post anonymously | Yes | — | — | — |
+| Comment on post | Yes | — (review-only) | Yes | Yes |
+| React (like) to post | Yes | Yes | Yes | Yes |
+| Flag post for moderation | Yes | Yes | Yes | Yes |
+| Moderate (hide / pin / delete) | — | — | Yes | Yes |
 | View OC documents | Yes | Yes | Yes | Yes |
-| Publish OC documents | — | Yes | — | Yes |
+| Publish OC documents (file or link) | — | Yes | Yes | Yes |
+| Delete OC documents | — | Yes | Yes | Yes |
 | Send push notifications | — | — | Yes | Yes |
-| Manage flat passwords | — | — | Yes | Yes |
+| Re-push existing notification | — | — | Yes | Yes |
+| Link additional flats to own account | Yes | Yes | — | — |
+| Manage flat passwords | — | — | — | Yes |
+| Create / edit / delete flats | — | — | — | Yes |
 | Manage users / roles | — | — | — | Yes |
-| System configuration | — | — | — | Yes |
+| Create non-resident user (no flat) | — | — | — | Yes |
 | View audit logs | — | — | — | Yes |
 
 ---
@@ -136,12 +148,23 @@ A structured system for residents to submit reports to the management office and
 | In Progress | 跟進中 | Management has acknowledged and is working on it |
 | Completed | 已完成 | Issue resolved and closed |
 
+**Auto-Reopen on Resident Follow-Up / 業主追問自動重開:**
+
+If a resident comments on a report whose status is `completed`, the system automatically:
+
+1. Transitions the status back to `in_progress`
+2. Writes an `auto_reopen` audit log entry
+3. Notifies every active mgmt_staff/admin user via in-app notification + web push
+
+The UI warns the resident before they comment that posting will reopen the ticket. Mgmt comments do **not** trigger auto-reopen (they may legitimately add closing remarks).
+
 **Additional Features:**
 
-- Management can add internal notes (not visible to reporter)
+- Management can add internal notes (`is_internal=true` — not visible to residents/committee)
 - Management can add reply messages visible to the reporter
 - Residents receive push notification on status changes
 - Report history searchable and filterable by status, type, date
+- Multiple reporters via multi-unit ownership: a report's "own" scope follows `User.id`, not flat — owners with multiple flats see one consolidated list
 
 ---
 
@@ -254,9 +277,16 @@ User (用戶)
 ├── phone
 ├── password_hash
 ├── name
-├── flat_id (FK → Flat)
+├── flat_id (FK → Flat, nullable — null for non-resident mgmt/committee/admin)
 ├── role (enum: resident, oc_committee, mgmt_staff, admin)
 ├── is_active
+├── created_at
+└── updated_at
+
+UserFlat (業主多單位連結 — join table for multi-unit owners)
+├── user_id (FK → User, composite PK)
+├── flat_id (FK → Flat, composite PK)
+├── linked_at
 ├── created_at
 └── updated_at
 
@@ -346,10 +376,13 @@ PostReaction (帖文反應)
 OcDocument (法團文件)
 ├── id (UUID)
 ├── publisher_id (FK → User)
-├── type (enum: meeting_minutes, financial_statement, resolution, notice)
+├── type (enum: meeting_minutes, financial_statement, resolution, notice,
+│         meeting_livestream, meeting_recording)
 ├── title
 ├── description
-├── file_path
+├── file_path (nullable — set for file-backed documents)
+├── external_url (nullable — set for link-backed documents)
+├── link_type (enum: google_meet, google_drive, google_site — nullable)
 ├── year
 ├── created_at
 └── updated_at
@@ -387,70 +420,97 @@ AuditLog (審計日誌)
 
 ## 7. API Overview / API 概覽
 
+> RBAC notes below show which roles can call each endpoint. `auth` means any authenticated user. Endpoints with no RBAC note accept all authenticated users.
+
 ### 7.1 Auth Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/auth/register` | Register with flat password |
 | POST | `/api/auth/login` | Login, returns JWT pair |
-| POST | `/api/auth/refresh` | Refresh access token |
+| POST | `/api/auth/refresh` | Refresh access token (rotates refresh token) |
 | POST | `/api/auth/logout` | Invalidate refresh token |
-| POST | `/api/auth/forgot-password` | Request password reset |
-| POST | `/api/auth/reset-password` | Reset password with token |
+
+> Forgot/reset-password routes are not yet wired on the server (UI pages exist as placeholders).
 
 ### 7.2 Incident Report Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/reports` | Create incident report |
-| GET | `/api/reports` | List reports (filtered) |
-| GET | `/api/reports/:id` | Get report detail |
-| PATCH | `/api/reports/:id/status` | Update report status (mgmt) |
-| POST | `/api/reports/:id/comments` | Add comment / reply |
-| POST | `/api/reports/:id/attachments` | Upload attachment |
+| Method | Path | Description | Roles |
+|--------|------|-------------|-------|
+| POST | `/api/reports` | Create incident report (multipart, optional attachments) | resident, mgmt_staff, admin |
+| GET | `/api/reports` | List reports — residents see own; committee/mgmt/admin see all | auth |
+| GET | `/api/reports/:id` | Get report detail (filters internal comments for non-mgmt) | auth |
+| PATCH | `/api/reports/:id/status` | Update report status (audit logged, notifies reporter) | mgmt_staff, admin |
+| POST | `/api/reports/:id/comments` | Add comment (auto-reopens completed reports for residents) | resident, mgmt_staff, admin |
+| POST | `/api/reports/:id/attachments` | Upload attachments (max 5 files) | resident, mgmt_staff, admin |
 
 ### 7.3 Discussion Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/boards` | List discussion boards |
-| GET | `/api/boards/:id/posts` | List posts in board |
-| POST | `/api/boards/:id/posts` | Create post (with photos) |
-| GET | `/api/posts/:id` | Get post detail |
-| POST | `/api/posts/:id/comments` | Add comment |
-| POST | `/api/posts/:id/reactions` | Add/remove reaction |
-| POST | `/api/posts/:id/report` | Flag post |
-| PATCH | `/api/posts/:id/moderate` | Hide/pin post (mgmt) |
+Boards are scoped: estate-wide boards are visible to everyone; block/floor boards are visible only to users whose flat (or any linked flat via `user_flats`) matches that block/floor. Mgmt and admin see all boards.
+
+| Method | Path | Description | Roles |
+|--------|------|-------------|-------|
+| GET | `/api/boards` | List boards accessible to the user | auth |
+| GET | `/api/boards/:id/posts` | List posts (pinned first, hidden filtered for non-mgmt) | auth |
+| POST | `/api/boards/:id/posts` | Create post with optional photos + anonymous flag | resident, mgmt_staff, admin |
+| GET | `/api/posts/:id` | Get post detail (images, comments, reactions) | auth |
+| POST | `/api/posts/:id/comments` | Add comment (supports anonymous) | resident, mgmt_staff, admin |
+| POST | `/api/posts/:id/reactions` | Toggle reaction (`like`) | auth |
+| POST | `/api/posts/:id/report` | Flag inappropriate content | auth |
+| PATCH | `/api/posts/:id/moderate` | Hide / pin / unpin / delete | mgmt_staff, admin |
 
 ### 7.4 OC Document Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/oc-documents` | Upload document (OC/admin) |
-| GET | `/api/oc-documents` | List documents (filtered) |
-| GET | `/api/oc-documents/:id` | Get document detail |
-| DELETE | `/api/oc-documents/:id` | Remove document (OC/admin) |
+| Method | Path | Description | Roles |
+|--------|------|-------------|-------|
+| POST | `/api/oc-documents` | Upload file-backed document (multipart) | oc_committee, mgmt_staff, admin |
+| POST | `/api/oc-documents/link` | Publish link-backed document (Google Meet / Drive / Site) | oc_committee, mgmt_staff, admin |
+| GET | `/api/oc-documents` | List documents (filterable by year, type) | auth |
+| GET | `/api/oc-documents/:id` | Get document detail | auth |
+| DELETE | `/api/oc-documents/:id` | Remove document | oc_committee, mgmt_staff, admin |
 
 ### 7.5 Notification Endpoints
 
+| Method | Path | Description | Roles |
+|--------|------|-------------|-------|
+| POST | `/api/notifications` | Send targeted notification (creates DB row + Web Push fan-out) | mgmt_staff, admin |
+| POST | `/api/notifications/:id/resend` | Re-push an existing notification (no new row) | mgmt_staff, admin |
+| GET | `/api/notifications` | List current user's notifications (paginated, `unreadOnly`) | auth |
+| GET | `/api/notifications/:id` | Single notification (compose prefill) | mgmt_staff, admin |
+| PATCH | `/api/notifications/:id/read` | Mark one as read | auth |
+| PATCH | `/api/notifications/read-all` | Mark all as read | auth |
+| GET | `/api/push/vapid-key` | Public VAPID key for browser subscription | auth |
+| POST | `/api/push/subscribe` | Register push subscription | auth |
+| DELETE | `/api/push/subscribe` | Unregister push subscription | auth |
+| POST | `/api/push/test` | Send a test push to the current user | auth |
+
+### 7.6 User-Flats (Multi-Unit Owner) Endpoints
+
+| Method | Path | Description | Roles |
+|--------|------|-------------|-------|
+| GET | `/api/users/me/flats` | List flats linked to the current user (primary + linked) | auth |
+| POST | `/api/users/me/flats` | Link an additional flat (verified via flat password) | auth |
+| DELETE | `/api/users/me/flats/:flatId` | Unlink a non-primary flat | auth |
+
+### 7.7 Admin Endpoints
+
+All admin endpoints require `admin` role.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/notifications` | Send notification (mgmt) |
-| GET | `/api/notifications` | List user notifications |
-| PATCH | `/api/notifications/:id/read` | Mark as read |
-| POST | `/api/push/subscribe` | Register push subscription |
-| DELETE | `/api/push/subscribe` | Unregister push subscription |
-
-### 7.6 Admin Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/admin/users` | List all users |
+| GET | `/api/admin/stats` | Dashboard counters (users, reports, posts, documents) |
+| GET | `/api/admin/users` | List all users (paginated, filterable) |
+| POST | `/api/admin/users` | Create user (resident with flat OR non-resident mgmt/committee/admin) |
 | PATCH | `/api/admin/users/:id/role` | Update user role |
-| PATCH | `/api/admin/users/:id/status` | Activate/deactivate user |
-| GET | `/api/admin/flats` | List all flats |
-| POST | `/api/admin/flats/:id/reset-password` | Regenerate flat password |
-| GET | `/api/admin/audit-logs` | View audit logs |
+| PATCH | `/api/admin/users/:id/status` | Activate / deactivate user |
+| GET | `/api/admin/flats` | List flats (paginated, filterable) |
+| GET | `/api/admin/flats/blocks` | List distinct blocks (for filter dropdowns) |
+| GET | `/api/admin/flats/export-csv` | Export flat list as CSV |
+| POST | `/api/admin/flats` | Create new flat |
+| PATCH | `/api/admin/flats/:id` | Edit flat |
+| DELETE | `/api/admin/flats/:id` | Delete flat |
+| POST | `/api/admin/flats/:id/reset-password` | Regenerate flat registration password (returned once, plaintext) |
+| GET | `/api/admin/audit-logs` | View audit logs (paginated, filterable) |
 
 ---
 
@@ -521,6 +581,19 @@ AuditLog (審計日誌)
 - Performance optimization
 - Accessibility audit and fixes
 - Security hardening and penetration testing
+
+### Phase 6 — Post-Launch Iterations / 上線後迭代
+
+Implemented after the initial 5-wave build:
+
+- **Multi-unit owners** — `user_flats` join table; residents who own more than one flat link extras via `/profile/flats`. Discussion-board scoping resolves to every linked flat's block/floor.
+- **Common-area report locations** — `location_block` / `location_floor` / `location_area` are now optional, supporting reports for shared facilities (lobbies, lifts, corridors).
+- **Manual notification compose for mgmt** — dedicated `/notifications/compose` page with category, target, and reminder/re-push controls.
+- **Auto-reopen on resident follow-up** — completed reports reopen when a resident comments; mgmt is notified; UI warns first.
+- **Non-resident user creation** — admins can create mgmt/committee/admin accounts without assigning a flat.
+- **OC committee read-only** — committee accounts cannot file tickets, comment, or author posts; they retain full read access plus reactions and post flags.
+- **OC documents — link-backed** — beyond file uploads, OC committee can publish Google Meet / Drive / Site links for livestreams and recordings.
+- **CI container build** — GitHub Actions builds and pushes server + client images to GHCR on push to `main` and on `v*` tags.
 
 ---
 

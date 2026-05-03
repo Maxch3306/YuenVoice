@@ -1,7 +1,7 @@
 # YUENVOICE — Architecture Document
 
-> Version: 1.0
-> Last Updated: 2026-03-28
+> Version: 1.1
+> Last Updated: 2026-05-02
 > Reference: [PRD.md](PRD.md)
 
 ---
@@ -52,64 +52,71 @@ YUENVOICE is a monorepo PWA with a clear client-server separation. The frontend 
 yuenvoice/
 ├── docs/                        # Documentation
 │   ├── PRD.md
-│   └── architecture.md
+│   ├── architecture.md
+│   ├── development-plan.md
+│   └── ui/                      # Sitemap + per-page wireframes
+├── design-system/yuenvoice/     # MASTER.md + design tokens
+├── .github/workflows/
+│   └── build-images.yml         # CI: build & push GHCR images
 ├── packages/
-│   ├── client/                  # Frontend (Vite + React)
+│   ├── client/                  # Frontend (Vite + React 19)
 │   │   ├── public/
 │   │   │   ├── manifest.json    # PWA manifest
 │   │   │   ├── sw.js            # Service Worker
-│   │   │   └── icons/           # App icons (192, 512)
+│   │   │   └── icons/
 │   │   ├── src/
-│   │   │   ├── main.tsx         # Entry point
-│   │   │   ├── App.tsx          # Root component + router
-│   │   │   ├── components/      # Shared UI components
+│   │   │   ├── main.tsx         # Entry
+│   │   │   ├── App.tsx          # Router
+│   │   │   ├── components/
 │   │   │   │   └── ui/          # shadcn/ui components
-│   │   │   ├── pages/           # Route-level page components
-│   │   │   │   ├── auth/        # Login, Register
-│   │   │   │   ├── reports/     # Incident reports
-│   │   │   │   ├── discussion/  # Discussion boards
-│   │   │   │   ├── oc/          # OC documents
-│   │   │   │   ├── notifications/ # Notification center
-│   │   │   │   └── admin/       # Admin dashboard
-│   │   │   ├── hooks/           # Custom React hooks
-│   │   │   ├── stores/          # Zustand state stores
-│   │   │   ├── services/        # API client functions
-│   │   │   ├── lib/             # Utilities, constants
-│   │   │   └── types/           # Shared TypeScript types
-│   │   ├── index.html
-│   │   ├── tailwind.config.ts
-│   │   ├── tsconfig.json
+│   │   │   ├── pages/
+│   │   │   │   ├── auth/        # Login, Register, Forgot/Reset password
+│   │   │   │   ├── reports/     # List, Create, Detail
+│   │   │   │   ├── discussion/  # Boards, Posts, Create, Detail
+│   │   │   │   ├── oc/          # Document list + view
+│   │   │   │   ├── notifications/ # Center + Compose
+│   │   │   │   ├── profile/     # MyFlats (multi-unit owner)
+│   │   │   │   └── admin/       # Dashboard, Users, Flats, AuditLogs
+│   │   │   ├── hooks/
+│   │   │   ├── stores/          # Zustand (auth, theme)
+│   │   │   ├── services/        # API client + TanStack Query hooks
+│   │   │   ├── lib/             # i18n, translations, utils
+│   │   │   └── types/
+│   │   ├── components.json      # shadcn config
 │   │   └── vite.config.ts
 │   │
-│   └── server/                  # Backend (Fastify)
+│   └── server/                  # Backend (Fastify 5, ESM)
 │       ├── src/
-│       │   ├── index.ts         # Server entry, Fastify init
-│       │   ├── app.ts           # Plugin registration, route mounting
-│       │   ├── config/          # Environment & app config
-│       │   │   └── index.ts
-│       │   ├── plugins/         # Fastify plugins
-│       │   │   ├── auth.ts      # JWT verification decorator
-│       │   │   ├── rbac.ts      # Role-based access guard
-│       │   │   ├── redis.ts     # Redis client plugin
-│       │   │   └── upload.ts    # File upload (multipart)
-│       │   ├── routes/          # Route modules
+│       │   ├── index.ts         # Server entry
+│       │   ├── app.ts           # Plugin & route registration (preserve order)
+│       │   ├── config/index.ts
+│       │   ├── plugins/
+│       │   │   ├── auth.ts      # @fastify/jwt + cookie + authenticate decorator
+│       │   │   ├── rbac.ts      # rbac(roles[]) preHandler factory
+│       │   │   ├── redis.ts     # ioredis client plugin
+│       │   │   └── upload.ts    # @fastify/multipart + magic-byte validation
+│       │   ├── routes/
 │       │   │   ├── auth.ts
 │       │   │   ├── reports.ts
 │       │   │   ├── discussions.ts
 │       │   │   ├── oc-documents.ts
 │       │   │   ├── notifications.ts
+│       │   │   ├── user-flats.ts        # multi-unit owner endpoints
 │       │   │   └── admin.ts
-│       │   ├── services/        # Business logic layer
+│       │   ├── services/
 │       │   │   ├── auth.service.ts
-│       │   │   ├── report.service.ts
+│       │   │   ├── report.service.ts        # incl. auto-reopen + mgmt notify
 │       │   │   ├── discussion.service.ts
-│       │   │   ├── oc-document.service.ts
-│       │   │   ├── notification.service.ts
+│       │   │   ├── oc-document.service.ts   # file + link-backed documents
+│       │   │   ├── notification.service.ts  # send + resend + read tracking
+│       │   │   ├── user-flat.service.ts     # multi-unit owner linking
 │       │   │   └── push.service.ts
-│       │   ├── models/          # Sequelize model definitions
-│       │   │   ├── index.ts     # Model registration & associations
+│       │   ├── models/          # 16 Sequelize models
+│       │   │   ├── sequelize.ts # Sequelize instance (extracted, no circular)
+│       │   │   ├── index.ts     # Associations + re-exports
 │       │   │   ├── user.ts
 │       │   │   ├── flat.ts
+│       │   │   ├── user-flat.ts             # join table for multi-unit owners
 │       │   │   ├── incident-report.ts
 │       │   │   ├── incident-attachment.ts
 │       │   │   ├── incident-comment.ts
@@ -122,20 +129,22 @@ yuenvoice/
 │       │   │   ├── notification.ts
 │       │   │   ├── user-notification.ts
 │       │   │   └── audit-log.ts
-│       │   ├── middleware/      # Request-level middleware
+│       │   ├── middleware/
 │       │   │   └── rate-limit.ts
-│       │   └── utils/           # Helpers (hashing, pagination, etc.)
-│       ├── migrations/          # Sequelize migration files
-│       ├── seeders/             # Sequelize seed files
-│       ├── uploads/             # Uploaded file storage (dev)
-│       ├── .sequelizerc         # Sequelize CLI config
-│       ├── tsconfig.json
+│       │   ├── utils/           # hash, pagination, audit, sanitize, env-validator, setup
+│       │   └── __tests__/       # auth.test.ts, routes.test.ts, integration/smoke.test.ts
+│       ├── migrations/          # 16 .cjs files, YYYYMMDDHHMMSS-name.cjs
+│       ├── seeders/
+│       ├── uploads/             # local file storage
+│       ├── .sequelizerc
 │       └── package.json
 │
+├── Dockerfile                   # Multi-stage (server + client targets)
+├── docker-compose.yml           # Production stack
+├── docker-compose.dev.yml       # Local dev stack
 ├── package.json                 # Root workspace config
-├── pnpm-workspace.yaml          # pnpm workspace definition
-├── .env.example                 # Environment variable template
-├── .gitignore
+├── pnpm-workspace.yaml
+├── .env.example
 └── LICENSE
 ```
 
@@ -151,16 +160,20 @@ React Router v7 with layout-based routing. Protected routes redirect unauthentic
 /                          → Redirect to /reports (default home)
 /login                     → Login page
 /register                  → Registration (flat password flow)
-/reports                   → My incident reports list
-/reports/new               → Create new report
+/forgot-password           → Forgot password (UI placeholder, server not yet wired)
+/reset-password            → Reset password (UI placeholder, server not yet wired)
+/reports                   → Incident reports list (residents see own, others see all)
+/reports/new               → Create new report (committee blocked)
 /reports/:id               → Report detail + status timeline
 /discussion                → Board list
 /discussion/:boardId       → Posts in board
-/discussion/:boardId/new   → Create new post
+/discussion/:boardId/new   → Create new post (committee blocked)
 /discussion/post/:postId   → Post detail + comments
 /oc                        → OC documents list
-/oc/:id                    → Document viewer (PDF)
+/oc/:id                    → Document viewer (file or link)
 /notifications             → Notification center
+/notifications/compose     → Compose notification (mgmt/admin)
+/profile/flats             → My flats (multi-unit owner — link/unlink units)
 /admin                     → Admin dashboard (admin only)
 /admin/users               → User management
 /admin/flats               → Flat & password management
@@ -173,10 +186,10 @@ React Router v7 with layout-based routing. Protected routes redirect unauthentic
 
 | Store | Responsibility |
 |-------|---------------|
-| `useAuthStore` | Current user, tokens, login/logout actions |
-| `useNotificationStore` | Unread count, notification list, mark-as-read |
+| `useAuthStore` | Current user, in-memory access token, isAuthenticated flag |
+| `useThemeStore` | Light / dark / system theme, keyboard-shortcut toggle |
 
-Server state (reports, posts, documents) is managed via **React Query (TanStack Query)** for caching, refetching, and optimistic updates.
+Server state (reports, posts, documents, notifications, flats, users) is managed via **TanStack Query** for caching, refetching, and optimistic updates. Service files (`src/services/*.ts`) export the Query hooks alongside the raw API calls. Notification unread count is read directly from the notifications query, not stored in Zustand.
 
 ### 3.3 API Client
 
@@ -257,16 +270,18 @@ Incoming Request
 ### 4.3 Service Layer Pattern
 
 Route handlers delegate to service modules. Services contain all business logic and are responsible for:
-- Data validation beyond schema (e.g., checking flat password)
+
+- Data validation beyond schema (e.g., checking flat password, target resolution)
 - Sequelize queries and transactions
-- Redis cache invalidation
-- Triggering push notifications
+- Redis pub/sub for realtime fan-out
+- Triggering web-push notifications (fire-and-forget — failures don't break the request)
 - Writing audit log entries
+- State-machine transitions (e.g., auto-reopen on resident follow-up)
 
 ```typescript
-// Example: routes/reports.ts
+// Example: routes/reports.ts — note oc_committee is excluded (review-only)
 fastify.post('/api/reports', {
-  preHandler: [fastify.authenticate, fastify.rbac(['resident', 'oc_committee', 'mgmt_staff', 'admin'])]
+  preHandler: [fastify.authenticate, fastify.rbac(['resident', 'mgmt_staff', 'admin'])]
 }, async (request, reply) => {
   const report = await reportService.create(request.user.id, request.body);
   return reply.status(201).send(report);
@@ -313,98 +328,125 @@ fastify.post('/api/reports', {
 ### 5.1 Entity Relationship Diagram
 
 ```
-┌──────────┐       ┌───────────────────┐       ┌─────────────────┐
-│   Flat   │1────N│      User          │1────N │ IncidentReport   │
-│          │       │                   │       │                  │
-│ block    │       │ email             │       │ type             │
-│ floor    │       │ name              │       │ status           │
-│ unit_no  │       │ role              │       │ priority         │
-│ reg_pwd  │       │ flat_id (FK)      │       │ reporter_id (FK) │
-└──────────┘       └─────────┬─────────┘       └────────┬─────────┘
-                             │                          │
-                             │                    ┌─────┴──────┐
-                             │                    │            │
-                      ┌──────┴───────┐    ┌──────┴─────┐ ┌────┴──────────┐
-                      │DiscussionPost│    │ Incident   │ │ Incident      │
-                      │              │    │ Comment    │ │ Attachment    │
-                      │ board_id(FK) │    └────────────┘ └───────────────┘
-                      │ author_id(FK)│
-                      │ is_anonymous │
-                      └──────┬───────┘
-                             │
-                   ┌─────────┼──────────┐
-                   │         │          │
-             ┌─────┴────┐ ┌──┴──────┐ ┌─┴───────────┐
-             │PostImage  │ │Post     │ │Post         │
-             │           │ │Comment  │ │Reaction     │
-             └──────────┘ └─────────┘ └─────────────┘
+┌──────────┐ 1     N ┌───────────────────┐ 1   N ┌─────────────────┐
+│   Flat   │─────────│      User         │───────│ IncidentReport  │
+│          │ primary │                   │       │                 │
+│ block    │ flat_id │ email             │       │ type            │
+│ floor    │ (null-  │ name              │       │ status          │
+│ unit_no  │  able)  │ role              │       │ priority        │
+│ reg_pwd  │         │ flat_id (FK,      │       │ reporter_id     │
+│          │         │   nullable)       │       │ location_*      │
+└────┬─────┘         └─────────┬─────────┘       └────────┬────────┘
+     │                         │                          │
+     │  ┌──────────────────────┤                          │
+     │  │  N        N          │                    ┌─────┴──────┐
+     │  ▼                      │                    ▼            ▼
+     │  ┌──────────────┐       │              ┌────────────┐ ┌──────────────┐
+     └──│  UserFlat    │       │              │ Incident   │ │ Incident     │
+        │ (join table) │       │              │ Comment    │ │ Attachment   │
+        │ user_id (PK) │       │              │ is_internal│ │              │
+        │ flat_id (PK) │       │              └────────────┘ └──────────────┘
+        │ linked_at    │       │
+        └──────────────┘       │
+                               │ N
+                      ┌────────┴──────┐
+                      │ DiscussionPost│
+                      │  board_id     │
+                      │  author_id    │
+                      │  is_anonymous │
+                      │  is_hidden    │
+                      │  is_pinned    │
+                      └───────┬───────┘
+                              │
+                ┌─────────────┼─────────────┐
+                ▼             ▼             ▼
+         ┌──────────┐ ┌─────────────┐ ┌──────────────┐
+         │PostImage │ │PostComment  │ │PostReaction  │
+         │          │ │is_anonymous │ │type='like'   │
+         └──────────┘ └─────────────┘ └──────────────┘
 
-┌──────────────┐     ┌───────────────────┐
-│ OcDocument   │     │   Notification     │1────N┌──────────────────┐
-│              │     │                   │      │ UserNotification  │
-│ publisher_id │     │ sender_id         │      │                  │
-│ type         │     │ target_type       │      │ user_id (FK)     │
-│ file_path    │     │ target_block      │      │ is_read          │
-└──────────────┘     └───────────────────┘      └──────────────────┘
+┌──────────────┐                ┌────────────────┐ 1   N ┌──────────────────┐
+│ OcDocument   │                │  Notification  │───────│ UserNotification │
+│              │                │                │       │                  │
+│ publisher_id │                │ sender_id      │       │ user_id (FK)     │
+│ type (6)     │                │ category       │       │ is_read          │
+│ file_path    │                │ target_type    │       │ read_at          │
+│ external_url │                │ target_block   │       └──────────────────┘
+│ link_type    │                │ target_floor   │
+└──────────────┘                └────────────────┘
 
 ┌──────────────┐
 │  AuditLog    │
-│              │
 │ user_id (FK) │
 │ action       │
 │ entity_type  │
-│ metadata     │
+│ entity_id    │
+│ metadata JSON│
 └──────────────┘
 ```
 
+**Key relationships:**
+
+- `User` ↔ `Flat` is many-to-many via `UserFlat` (a resident can own multiple flats; a flat can have multiple co-owners). The legacy `User.flat_id` column remains as the **primary** flat for backward compatibility and for default `block`/`floor` resolution; additional flats are linked through `UserFlat`.
+- `User.flat_id` is **nullable** — admins create non-resident mgmt/committee/admin accounts that aren't bound to any flat.
+- All FK relationships cascade on delete except `User → IncidentReport` (a user is never hard-deleted while reports remain).
+
 ### 5.2 Sequelize Configuration
+
+Migrations are CommonJS (`.cjs`) and named `YYYYMMDDHHMMSS-description.cjs`. Umzug auto-runs pending migrations on server startup, so there is no manual `db:migrate` step in dev. Once a migration has been merged to `main`, never edit it — write a new one.
 
 ```
 packages/server/
-├── .sequelizerc               # Points to compiled paths
-├── migrations/
-│   ├── 001-create-flats.js
-│   ├── 002-create-users.js
-│   ├── 003-create-incident-reports.js
-│   ├── 004-create-incident-attachments.js
-│   ├── 005-create-incident-comments.js
-│   ├── 006-create-discussion-boards.js
-│   ├── 007-create-discussion-posts.js
-│   ├── 008-create-post-images.js
-│   ├── 009-create-post-comments.js
-│   ├── 010-create-post-reactions.js
-│   ├── 011-create-oc-documents.js
-│   ├── 012-create-notifications.js
-│   ├── 013-create-user-notifications.js
-│   └── 014-create-audit-logs.js
+├── .sequelizerc                                    # Points to compiled paths
+├── migrations/                                     # 16 files, chronological
+│   ├── 20260328000001-create-flats.cjs
+│   ├── 20260328000002-create-users.cjs
+│   ├── 20260328000003-create-incident-reports.cjs
+│   ├── 20260328000004-create-incident-attachments.cjs
+│   ├── 20260328000005-create-incident-comments.cjs
+│   ├── 20260328000006-create-discussion-boards.cjs
+│   ├── 20260328000007-create-discussion-posts.cjs
+│   ├── 20260328000008-create-post-images.cjs
+│   ├── 20260328000009-create-post-comments.cjs
+│   ├── 20260328000010-create-post-reactions.cjs
+│   ├── 20260328000011-create-oc-documents.cjs
+│   ├── 20260328000012-create-notifications.cjs
+│   ├── 20260328000013-create-user-notifications.cjs
+│   ├── 20260328000014-create-audit-logs.cjs
+│   ├── 20260422210000-add-oc-document-links.cjs    # external_url + link_type
+│   └── 20260422220000-create-user-flats.cjs        # multi-unit owner join
 └── seeders/
-    ├── 001-seed-flats.js           # Estate flats with registration passwords
-    ├── 002-seed-admin-user.js      # Default system admin account
-    └── 003-seed-discussion-boards.js # Default boards (estate-wide + per-block)
+    ├── seed-flats.cjs                              # Estate flats + reg passwords
+    ├── seed-admin-user.cjs                         # Default admin
+    └── seed-discussion-boards.cjs                  # Estate + per-block + per-floor
 ```
 
 **Key conventions:**
+
 - All primary keys are UUID v4 (`DataTypes.UUID`, `defaultValue: UUIDV4`)
-- Timestamps via `createdAt` / `updatedAt` (Sequelize default)
+- `underscored: true` on every model — TypeScript camelCase ↔ DB snake_case
+- Timestamps via `created_at` / `updated_at`; `IncidentComment` is the lone exception (no `updated_at`)
 - Soft delete not used — audit log tracks destructive actions instead
-- Indexes on foreign keys and commonly filtered columns (status, type, board_id)
+- Indexes on FKs and commonly filtered columns (status, type, board_id, target_block, target_floor)
+- Sequelize instance is in `src/models/sequelize.ts` (extracted to break circular imports between models/index.ts and individual model files)
 
 ### 5.3 Redis Usage
 
 | Key Pattern | Type | TTL | Purpose |
 |-------------|------|-----|---------|
-| `session:refresh:<userId>` | String | 7d | Refresh token for invalidation |
-| `user:<userId>` | Hash | 15m | Cached user profile |
-| `reports:list:<filters_hash>` | String | 5m | Cached report list queries |
-| `notifications:unread:<userId>` | String | 5m | Unread notification count |
-| `ratelimit:<ip>:<route>` | String | 1m | Rate limit counter |
+| `session:refresh:<userId>` | Hash (`{sid: tokenHash}`) | 7d | Per-session refresh token hashes — invalidating one session won't kill the user's other devices |
+| `push:sub:<userId>` | Hash (`{endpoint: subscriptionJson}`) | none | Web Push subscriptions (one user can have many devices) |
+| `ratelimit:<route>:<ip>` | String | 1m | `@fastify/rate-limit` counter |
+
+> Caching of report lists / unread counts / user profiles is **not** implemented — all reads go straight to PostgreSQL via Sequelize. TanStack Query handles the client-side cache. Add Redis caching only if a measured hot path requires it.
 
 **Pub/Sub channels:**
 
 | Channel | Publisher | Subscriber | Event |
 |---------|-----------|------------|-------|
-| `notify:user:<userId>` | Notification service | Client (SSE/polling) | New notification |
-| `report:status:<reportId>` | Report service | Client (SSE/polling) | Status change |
+| `push:queue` | Notification service | Push worker (in-process) | Web Push dispatch fan-out |
+
+> Real-time SSE/WebSocket transport is not yet wired — clients poll via TanStack Query for now.
 
 ---
 
@@ -502,6 +544,8 @@ Return file metadata (path, type, size) → saved to DB
 | `POST /api/auth/*` | 10 requests | 1 minute |
 | `POST /api/reports` | 20 requests | 1 minute |
 | `POST /api/boards/*/posts` | 10 requests | 1 minute |
+| `POST /api/notifications` | 5 requests | 1 minute |
+| `POST /api/notifications/:id/resend` | 10 requests | 1 minute |
 | All other routes | 100 requests | 1 minute |
 
 ### 8.3 Input Validation
@@ -536,29 +580,45 @@ All state-changing operations by management/admin roles are logged:
 ### 9.1 Development
 
 ```
-pnpm dev           # Runs both client (Vite dev server) and server (tsx watch)
-                   # Vite proxies /api → Fastify on port 3001
+pnpm dev           # Runs both client (Vite dev server, port 5173)
+                   # and server (tsx watch, port 3001) concurrently
+                   # Vite proxies /api → Fastify
+                   # Migrations auto-run on server startup via Umzug
 ```
 
-### 9.2 Production
+`docker-compose.dev.yml` ships a Postgres + Redis pair for local dev so devs don't need to install them on the host.
+
+### 9.2 Production — CI / CD
+
+`.github/workflows/build-images.yml` builds and pushes two container images on every push to `main` and on `v*` tags:
+
+- `ghcr.io/maxch3306/yuenvoice-server:<tag>`
+- `ghcr.io/maxch3306/yuenvoice-client:<tag>`
+
+Tags include the branch name, the short SHA, semver from `v*` tags, and `latest` (default branch only). Images are built from a single multi-stage `Dockerfile` with `target=server` and `target=client`. PRs build but don't push.
+
+`docker-compose.yml` runs the production stack: nginx (reverse proxy + static client) → fastify (server image) → postgres + redis.
 
 ```
-┌──────────────┐     ┌──────────────────────────────┐
-│   Nginx      │     │       Application Server      │
-│   (Reverse   │────→│                               │
-│    Proxy)    │     │  Fastify (Node.js)             │
-│              │     │  ├── Serves /api routes         │
-│  ├── SSL     │     │  └── Serves static client build │
-│  ├── gzip    │     │       from packages/client/dist │
-│  └── cache   │     └────────────┬─────────┬─────────┘
-└──────────────┘                  │         │
-                                  ▼         ▼
-                           ┌──────────┐ ┌───────┐
-                           │PostgreSQL│ │ Redis  │
-                           └──────────┘ └───────┘
+┌──────────────┐     ┌──────────────────────────────────┐
+│   Nginx      │     │   yuenvoice-server (Fastify)     │
+│   (Reverse   │────→│   ├── /api routes                │
+│    Proxy)    │     │   └── /uploads/* static files    │
+│              │     └────────────┬───────────┬─────────┘
+│  ├── SSL     │                  │           │
+│  ├── gzip    │     ┌──────────────────────────────────┐
+│  └── static  │────→│   yuenvoice-client (nginx+dist)  │
+│    client    │     └──────────────────────────────────┘
+└──────────────┘                  │           │
+                                  ▼           ▼
+                           ┌──────────┐ ┌──────────┐
+                           │PostgreSQL│ │  Redis   │
+                           └──────────┘ └──────────┘
 ```
 
 ### 9.3 Environment Variables
+
+The server fails fast on startup if any required variable is missing (`utils/env-validator.ts`). Defaults shown below are applied when the variable is unset — review every secret before deploying to production.
 
 ```env
 # Server
@@ -566,31 +626,36 @@ NODE_ENV=production
 PORT=3001
 API_PREFIX=/api
 
-# Database
+# Database (required)
 DATABASE_URL=postgresql://user:pass@localhost:5432/yuenvoice
 
-# Redis
+# Redis (required)
 REDIS_URL=redis://localhost:6379
 
-# JWT
-JWT_ACCESS_SECRET=<random-256-bit>
-JWT_REFRESH_SECRET=<random-256-bit>
+# JWT (override in production!)
+JWT_ACCESS_SECRET=dev-access-secret-change-in-production
+JWT_REFRESH_SECRET=dev-refresh-secret-change-in-production
 
-# Web Push (VAPID)
-VAPID_PUBLIC_KEY=<generated>
-VAPID_PRIVATE_KEY=<generated>
+# Web Push (VAPID — generate with `npx web-push generate-vapid-keys`)
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:admin@yuenvoice.app
 
 # File Upload
-UPLOAD_PROVIDER=local           # or "s3"
+UPLOAD_PROVIDER=local           # "local" or "s3"
 UPLOAD_DIR=./uploads
 UPLOAD_MAX_SIZE=10485760        # 10MB
 
-# S3 (optional)
+# S3 (only when UPLOAD_PROVIDER=s3 — not yet implemented)
 S3_BUCKET=
 S3_REGION=
 S3_ACCESS_KEY=
 S3_SECRET_KEY=
+
+# Default admin (created on first boot if no admin exists)
+ADMIN_EMAIL=admin@yuenvoice.app
+ADMIN_PASSWORD=admin123          # change immediately after first login
+ADMIN_NAME=System Admin
 ```
 
 ---

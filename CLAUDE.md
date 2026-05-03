@@ -79,9 +79,13 @@ pnpm --filter client typecheck        # TypeScript check without emit
 > For full details, see [docs/architecture.md](docs/architecture.md)
 
 - **4 user roles**: `resident`, `oc_committee`, `mgmt_staff`, `admin` — enforced via RBAC preHandler
-- **Flat registration**: residents provide their flat's pre-assigned password (argon2-hashed) to register
+- **OC committee is review-only**: can read every report + mgmt response and every discussion post, but cannot file tickets, leave comments, or author posts. Reactions and post flags stay open. Mgmt/admin/resident retain write access. Residents see only their own reports.
+- **Flat registration**: residents provide their flat's pre-assigned password (argon2-hashed) to register. `User.flat_id` is **nullable** so admins can create non-resident mgmt/committee accounts without a flat.
+- **Multi-unit owners**: residents who own more than one flat link extra units via `user_flats` (composite PK), surfaced through `/api/users/me/flats` and the `/profile/flats` page. Discussion-board scoping uses every linked flat's block/floor.
 - **Anonymous posting**: `is_anonymous` flag; real `author_id` stored but responses show "匿名業戶"
+- **Auto-reopen on follow-up**: a non-mgmt comment on a `completed` report transitions it back to `in_progress`, writes an audit entry, and notifies all mgmt/admin users (DB + web push, fire-and-forget). Once a report has been auto-reopened 3+ times, an additional escalation notification is fanned out to all `oc_committee` users on the 3rd and every subsequent reopen. The UI warns residents before they comment.
 - **File uploads**: stored at `uploads/{entity}/{yyyy-mm}/{uuid}.{ext}`, validated by magic bytes
+- **OC documents**: support both file-backed (PDF/image upload) and link-backed (`external_url` + `link_type` enum: `google_meet` / `google_drive` / `google_site`) — used for meeting livestreams and recordings.
 - **Model conventions**: UUID PKs, `underscored: true` (camelCase → snake_case), `timestamps: true`, no soft deletes
 - **Sequelize instance**: extracted to `src/models/sequelize.ts` to avoid circular imports; associations in `src/models/index.ts`
 
@@ -106,12 +110,16 @@ pnpm --filter client typecheck        # TypeScript check without emit
 
 ## Implementation Status
 
-All core features (Waves 0–5) are **implemented**: auth, reports, discussion boards, OC documents, notifications, admin dashboard, PWA. 14 models, 18 pages, 6 route modules, 6 service modules.
+All core features (Waves 0–5) are **implemented** plus follow-up iterations: auth, reports, discussion boards, OC documents, notifications, admin dashboard, PWA, multi-unit owner support, OC committee review-only role, auto-reopen on resident follow-up, and CI image build.
+
+**Counts:** 16 models, 16 migrations, 7 route modules, 7 service modules, 21 pages.
+
+**Deployment:** GitHub Actions workflow at `.github/workflows/build-images.yml` builds and pushes server + client container images to `ghcr.io/maxch3306/yuenvoice-{server,client}` on every push to `main` and on tags `v*`. Local stack via `docker-compose.yml` (prod) and `docker-compose.dev.yml` (dev).
 
 ### Not yet built (future work)
 
-- SMS provider for password reset (email-only placeholder)
-- S3 file storage (local filesystem only)
-- Real-time WebSocket/SSE (currently polling via TanStack Query)
+- Password reset routes (`/auth/forgot-password`, `/auth/reset-password`) and SMS/email provider — UI pages exist, server endpoints not yet wired
+- S3 file storage (local filesystem only — `UPLOAD_PROVIDER=local`)
+- Real-time WebSocket/SSE (currently polling via TanStack Query + Redis pub/sub for fan-out)
 - In-app PDF viewer for OC documents (currently iframe/download)
-- Comprehensive test suite (infrastructure exists, coverage is minimal)
+- Comprehensive test suite (auth, routes, smoke tests exist; coverage is minimal)

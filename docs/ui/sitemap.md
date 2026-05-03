@@ -1,7 +1,7 @@
 # YUENVOICE — Sitemap
 
-> Version: 1.0
-> Last Updated: 2026-03-28
+> Version: 1.1
+> Last Updated: 2026-05-02
 > Reference: [PRD.md](../PRD.md) | [architecture.md](../architecture.md)
 
 ---
@@ -13,28 +13,31 @@ YUENVOICE
 │
 ├── /login                              登入
 ├── /register                           註冊（單位密碼驗證）
-├── /forgot-password                    忘記密碼
-├── /reset-password?token=...           重設密碼
+├── /forgot-password                    忘記密碼（UI 預留，後端未接通）
+├── /reset-password?token=...           重設密碼（UI 預留，後端未接通）
 │
 ├── /                                   → Redirect to /reports
 │
-├── /reports                            事件報告列表（我的報告）
-│   ├── /reports/new                    提交新報告
-│   └── /reports/:id                    報告詳情 + 狀態追蹤
+├── /reports                            事件報告列表（業主：我的；委員/管理：全部）
+│   ├── /reports/new                    提交新報告（委員不可進入）
+│   └── /reports/:id                    報告詳情 + 狀態追蹤（委員：唯讀）
 │
 ├── /discussion                         討論板列表
 │   ├── /discussion/:boardId            帖文列表
-│   ├── /discussion/:boardId/new        發佈新帖文
-│   └── /discussion/post/:postId        帖文詳情 + 留言
+│   ├── /discussion/:boardId/new        發佈新帖文（委員不可進入）
+│   └── /discussion/post/:postId        帖文詳情 + 留言（委員：唯讀，可讚好/舉報）
 │
 ├── /oc                                 法團文件列表
-│   └── /oc/:id                         文件檢視（PDF 預覽）
+│   └── /oc/:id                         文件檢視（PDF 預覽 / 外部連結）
 │
 ├── /notifications                      通知中心
+│   └── /notifications/compose          發佈通知（管理 / 管理員）
+│
+├── /profile/flats                      我的單位（多單位連結）
 │
 └── /admin                              管理後台（僅管理員）
-    ├── /admin/users                    用戶管理
-    ├── /admin/flats                    單位管理（註冊密碼）
+    ├── /admin/users                    用戶管理（含建立非業戶帳戶）
+    ├── /admin/flats                    單位管理（建立/編輯/刪除/重設密碼/CSV 匯出）
     └── /admin/audit-logs               審計日誌
 ```
 
@@ -55,39 +58,46 @@ YUENVOICE
 
 | Route | Page | Layout | Access | Description |
 |-------|------|--------|--------|-------------|
-| `/reports` | ReportListPage | MainLayout | All authenticated | 我的事件報告列表，可篩選狀態及類型 |
-| `/reports/new` | CreateReportPage | MainLayout | All authenticated | 提交維修 / 投訴 / 查詢報告，含圖片上載 |
-| `/reports/:id` | ReportDetailPage | MainLayout | Owner / Mgmt / Admin | 報告詳情、狀態時間軸、附件、留言紀錄 |
+| `/reports` | ReportListPage | MainLayout | All authenticated | 業主：我的報告；委員/管理：全屋苑報告。FAB 對委員隱藏。 |
+| `/reports/new` | CreateReportPage | MainLayout | Resident / Mgmt / Admin | 提交維修 / 投訴 / 查詢報告，含圖片上載及共用區位置 |
+| `/reports/:id` | ReportDetailPage | MainLayout | Owner / Committee / Mgmt / Admin | 報告詳情、狀態時間軸、附件、留言紀錄。委員見表單但不能留言；業主追問已完成報告會自動重開（UI 先警告） |
 
 ### Discussion Pages / 討論頁面
 
 | Route | Page | Layout | Access | Description |
 |-------|------|--------|--------|-------------|
-| `/discussion` | BoardListPage | MainLayout | All authenticated | 討論板列表（全屋苑 + 各座） |
-| `/discussion/:boardId` | PostListPage | MainLayout | All authenticated | 討論板內帖文列表，置頂帖優先 |
-| `/discussion/:boardId/new` | CreatePostPage | MainLayout | All authenticated | 發佈帖文，支援圖片上載及匿名模式 |
-| `/discussion/post/:postId` | PostDetailPage | MainLayout | All authenticated | 帖文全文、圖片、留言、讚好、舉報 |
+| `/discussion` | BoardListPage | MainLayout | All authenticated | 討論板列表（全屋苑 + 用戶有份單位之座/樓層；管理見全部） |
+| `/discussion/:boardId` | PostListPage | MainLayout | All authenticated | 帖文列表，置頂優先；FAB 對委員隱藏 |
+| `/discussion/:boardId/new` | CreatePostPage | MainLayout | Resident / Mgmt / Admin | 發佈帖文，支援圖片上載及匿名模式 |
+| `/discussion/post/:postId` | PostDetailPage | MainLayout | All authenticated | 帖文全文、圖片、留言、讚好、舉報。委員可讚/舉報，不能留言 |
 
 ### OC Document Pages / 法團文件頁面
 
 | Route | Page | Layout | Access | Description |
 |-------|------|--------|--------|-------------|
-| `/oc` | DocumentListPage | MainLayout | All authenticated | 法團文件列表，按年份及類型篩選 |
-| `/oc/:id` | DocumentViewPage | MainLayout | All authenticated | 文件檢視（PDF 內嵌預覽）及下載 |
+| `/oc` | DocumentListPage | MainLayout | All authenticated | 法團文件列表，按年份及類型篩選；上載/外部連結（委員/管理） |
+| `/oc/:id` | DocumentViewPage | MainLayout | All authenticated | 文件檢視（檔案 iframe / 外部連結重定向）及下載 |
 
 ### Notification Pages / 通知頁面
 
 | Route | Page | Layout | Access | Description |
 |-------|------|--------|--------|-------------|
 | `/notifications` | NotificationCenterPage | MainLayout | All authenticated | 通知列表，已讀 / 未讀狀態，類別標籤 |
+| `/notifications/compose` | ComposeNotificationPage | MainLayout | Mgmt / Admin | 撰寫推送通知；支援目標範圍（全屋苑/座/樓層）、提醒、再次推送 |
+
+### Profile Pages / 個人頁面
+
+| Route | Page | Layout | Access | Description |
+|-------|------|--------|--------|-------------|
+| `/profile/flats` | MyFlatsPage | MainLayout | All authenticated | 多單位業主管理：列出主要 + 已連結單位，可加入新單位（驗證單位密碼）或解除連結 |
 
 ### Admin Pages / 管理頁面
 
 | Route | Page | Layout | Access | Description |
 |-------|------|--------|--------|-------------|
 | `/admin` | DashboardPage | AdminLayout | Admin only | 統計概覽：用戶數、報告數、近期活動 |
-| `/admin/users` | UserManagementPage | AdminLayout | Admin only | 用戶列表、角色變更、啟用 / 停用帳戶 |
-| `/admin/flats` | FlatManagementPage | AdminLayout | Admin only | 單位列表、重設註冊密碼、註冊狀態管理 |
+| `/admin/users` | UserManagementPage | AdminLayout | Admin only | 用戶列表、角色變更、啟用 / 停用、建立業戶或非業戶帳戶（管理/委員/管理員可無單位） |
+| `/admin/flats` | FlatManagementPage | AdminLayout | Admin only | 單位列表、CSV 匯出、建立/編輯/刪除單位、重設註冊密碼、註冊狀態管理 |
 | `/admin/audit-logs` | AuditLogPage | AdminLayout | Admin only | 審計日誌查詢、篩選、詳情展開 |
 
 ---
@@ -177,6 +187,7 @@ Used by: `/admin/*`
 | 討論區 | `/discussion` | All |
 | 法團文件 | `/oc` | All |
 | 通知中心 | `/notifications` | All |
+| 我的單位 | `/profile/flats` | All |
 | 管理後台 | `/admin` | Admin only |
 
 ### Admin Sidebar / 管理後台側邊導航
@@ -303,13 +314,19 @@ New password displayed (copy to clipboard)
 ## Access Control Summary / 存取控制摘要
 
 | Route Group | Public | Resident | OC Committee | Mgmt Staff | Admin |
-|-------------|--------|----------|-------------|------------|-------|
-| `/login`, `/register` | Yes | — | — | — | — |
-| `/reports/*` | — | Own only | Own only | All | All |
-| `/discussion/*` | — | Yes | Yes | Yes | Yes |
+|-------------|--------|----------|--------------|------------|-------|
+| `/login`, `/register`, `/forgot-password`, `/reset-password` | Yes | — | — | — | — |
+| `/reports` (list) | — | Own only | All (read) | All | All |
+| `/reports/new` (create) | — | Yes | — | Yes | Yes |
+| `/reports/:id` (detail) | — | Own | All (read; cannot comment/attach) | All | All |
+| `/discussion` (browse) | — | Yes | Yes | Yes | Yes |
+| `/discussion/:boardId/new` (create) | — | Yes | — | Yes | Yes |
+| `/discussion/post/:postId` (detail) | — | Yes | Read + react/flag (cannot comment) | Yes | Yes |
 | `/oc/*` (read) | — | Yes | Yes | Yes | Yes |
-| `/oc/*` (write) | — | — | Yes | — | Yes |
-| `/notifications` | — | Yes | Yes | Yes | Yes |
+| `/oc/*` (write/delete) | — | — | Yes | Yes | Yes |
+| `/notifications` (read) | — | Yes | Yes | Yes | Yes |
+| `/notifications/compose` | — | — | — | Yes | Yes |
+| `/profile/flats` | — | Yes | Yes | — (no flat) | — (no flat) |
 | `/admin/*` | — | — | — | — | Yes |
 
 ---
@@ -322,6 +339,7 @@ New password displayed (copy to clipboard)
 | Reports | 3 |
 | Discussion | 4 |
 | OC Documents | 2 |
-| Notifications | 1 |
+| Notifications | 2 |
+| Profile | 1 |
 | Admin | 4 |
-| **Total** | **18 pages** |
+| **Total** | **20 pages** |

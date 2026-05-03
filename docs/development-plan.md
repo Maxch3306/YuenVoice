@@ -1,8 +1,10 @@
 # YUENVOICE — Development Plan
 
-> Version: 1.0
-> Last Updated: 2026-03-28
+> Version: 1.1
+> Last Updated: 2026-05-02
 > Reference: [PRD.md](PRD.md) | [architecture.md](architecture.md)
+>
+> **Status:** Waves 0–5 are complete. The codebase has since received post-launch iterations — see [Wave 6 — Post-Launch Iterations](#wave-6--post-launch-iterations--上線後迭代) at the bottom of this document. The wave-based plan below is preserved as the original delivery record; do not rely on it as a snapshot of current code (consult [architecture.md](architecture.md) and [PRD.md](PRD.md) for current state).
 
 ---
 
@@ -505,3 +507,88 @@ Wave 2D    Wave 2E    Wave 2F    Wave 2G     Wave 3H  Wave 3I  Wave 3J  Wave 3K
 | M | 4 | `client/public/sw.js`, `client/public/manifest.json`, push UI, responsive CSS |
 | N | 5 | `server/src/__tests__/*`, `client/src/__tests__/*` |
 | O | 5 | Security config files, sanitization logic, validation hardening |
+
+---
+
+## Wave 6 — Post-Launch Iterations / 上線後迭代
+
+> Sequential, single-developer iterations layered on top of the parallelised waves above. Each item below is one or more atomic commits. Commits are linked by short SHA in the project's git history.
+
+### 6.1 Multi-unit owner support
+
+| Item | Detail |
+|------|--------|
+| Schema | New migration `20260422220000-create-user-flats.cjs` — composite-PK join table (`user_id`, `flat_id`) with `linked_at` timestamp |
+| Model | New `models/user-flat.ts`; associations updated in `models/index.ts` |
+| Service | New `services/user-flat.service.ts` — `getOwnedFlatIds`, `listUserFlats`, `linkFlat` (verifies flat password), `unlinkFlat` |
+| Routes | New `routes/user-flats.ts` — `GET / POST / DELETE /api/users/me/flats[/:flatId]` |
+| Client | New `pages/profile/MyFlatsPage.tsx`; navigation entry under "我的單位" |
+| Behaviour | `discussion.service.ts:listBoards` resolves block/floor scoping across **every** linked flat, deduped |
+| Schema (related) | Common-area report locations — `IncidentReport.location_block` / `location_floor` / `location_area` are nullable |
+
+### 6.2 OC document link-backed publishing
+
+| Item | Detail |
+|------|--------|
+| Schema | Migration `20260422210000-add-oc-document-links.cjs` adds `external_url` and `link_type` columns; `file_path` made nullable |
+| Enum | `OcDocument.type` extended with `meeting_livestream` and `meeting_recording` |
+| Routes | New `POST /api/oc-documents/link` for link-backed publishing |
+| Client | `DocumentListPage` and `DocumentViewPage` updated to surface external URLs (Google Meet / Drive / Site) |
+
+### 6.3 Auto-reopen + mgmt notification
+
+| Item | Detail |
+|------|--------|
+| Service | `report.service.ts:addComment` now transitions a `completed` report back to `in_progress` when a non-mgmt user comments. Writes `auto_reopen` audit entry; fans out a "報告重新開啟" notification (DB + web push) to every active mgmt_staff/admin user |
+| Notification | `notifyMgmtOfReopen` helper inside `report.service.ts` — fire-and-forget, never breaks the comment write |
+| Client | `ReportDetailPage` warns the resident before they post that commenting will reopen the ticket |
+| Commits | `1258a54`, `d1fff98`, `ba8dc90` |
+
+### 6.4 OC committee → review-only role
+
+| Item | Detail |
+|------|--------|
+| Reports | RBAC excludes `oc_committee` from `POST /api/reports`, `POST /api/reports/:id/comments`, `POST /api/reports/:id/attachments` |
+| Discussions | RBAC excludes `oc_committee` from `POST /api/boards/:id/posts` and `POST /api/posts/:id/comments` |
+| Reads | `oc_committee` retains full read access on every report and discussion post; reactions and post-flag actions remain open |
+| Client | FAB and comment forms hidden in `ReportListPage`, `ReportDetailPage`, `PostListPage`, `PostDetailPage` for committee users |
+| Commits | `10b4a41`, `829f517` |
+
+### 6.5 Manual notification compose + resend
+
+| Item | Detail |
+|------|--------|
+| Routes | `POST /api/notifications/:id/resend`, `GET /api/notifications/:id` (compose prefill), `PATCH /api/notifications/read-all`, `GET /api/push/vapid-key`, `POST /api/push/test` |
+| Client | New `pages/notifications/ComposeNotificationPage.tsx` with category, target-scope, reminder, and re-push controls |
+
+### 6.6 Non-resident user creation
+
+| Item | Detail |
+|------|--------|
+| Schema | `User.flat_id` made nullable (no migration needed; column was already nullable in the original schema) |
+| Routes | `POST /api/admin/users` accepts mgmt/committee/admin payloads with no `flat_id` |
+| Client | `UserManagementPage` "Create user" dialog skips the flat selector when role ≠ resident |
+| Commit | `a154e25` |
+
+### 6.7 Admin flats CRUD
+
+| Item | Detail |
+|------|--------|
+| Routes | `POST /api/admin/flats`, `PATCH /api/admin/flats/:id`, `DELETE /api/admin/flats/:id`, `GET /api/admin/flats/blocks`, `GET /api/admin/flats/export-csv` |
+| Client | `FlatManagementPage` extended with create/edit/delete dialogs, CSV export, block filter |
+
+### 6.8 CI container build
+
+| Item | Detail |
+|------|--------|
+| Workflow | `.github/workflows/build-images.yml` builds and pushes server + client images to `ghcr.io/maxch3306/yuenvoice-{server,client}` on push to `main` and on `v*` tags |
+| Dockerfile | Multi-stage with `target=server` and `target=client`; built via Buildx with GHA cache |
+| Commit | `7ad9e69` |
+
+### Outstanding follow-ups
+
+- `/auth/forgot-password` and `/auth/reset-password` server endpoints (UI placeholders exist)
+- S3 storage adapter (only `local` is implemented despite `UPLOAD_PROVIDER` being parameterised)
+- Real-time SSE/WebSocket transport (clients poll TanStack Query; Redis pub/sub is wired only for in-process push fan-out)
+- In-app PDF viewer (currently iframe / browser-native preview)
+- Test coverage (auth, routes, smoke tests exist; broad coverage missing)
