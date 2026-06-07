@@ -9,9 +9,10 @@ export interface SendNotificationData {
   title: string
   body: string
   category: 'urgent' | 'general' | 'event'
-  targetType: 'all' | 'block' | 'floor'
+  targetType: 'all' | 'block' | 'floor' | 'user'
   targetBlock?: string
   targetFloor?: string
+  targetUserId?: string
 }
 
 export interface ListNotificationFilters {
@@ -25,6 +26,23 @@ export async function send(
   data: SendNotificationData,
   redis: Redis
 ): Promise<{ notification: Notification; targetCount: number }> {
+  // For an individual reminder, validate the recipient up-front so the caller
+  // gets a clean error instead of a notification that reaches nobody.
+  if (data.targetType === 'user') {
+    if (!data.targetUserId) {
+      throw Object.assign(new Error('targetUserId is required for user target'), {
+        statusCode: 400,
+      })
+    }
+    const recipient = await User.findOne({
+      where: { id: data.targetUserId, is_active: true, deleted_at: null },
+      attributes: ['id'],
+    })
+    if (!recipient) {
+      throw Object.assign(new Error('Recipient not found'), { statusCode: 404 })
+    }
+  }
+
   // 1. Create Notification record
   const notification = await Notification.create({
     sender_id: senderId,
@@ -34,33 +52,40 @@ export async function send(
     target_type: data.targetType,
     target_block: data.targetBlock ?? null,
     target_floor: data.targetFloor ?? null,
+    target_user_id: data.targetType === 'user' ? data.targetUserId! : null,
   })
 
   // 2. Resolve target users
-  const userWhere: Record<string, unknown> = { is_active: true }
-  let includeFlat = false
-  const flatWhere: Record<string, unknown> = {}
+  let targetUserIds: string[]
 
-  if (data.targetType === 'block' && data.targetBlock) {
-    includeFlat = true
-    flatWhere.block = data.targetBlock
-  } else if (data.targetType === 'floor' && data.targetBlock && data.targetFloor) {
-    includeFlat = true
-    flatWhere.block = data.targetBlock
-    flatWhere.floor = data.targetFloor
+  if (data.targetType === 'user') {
+    targetUserIds = [data.targetUserId!]
+  } else {
+    const userWhere: Record<string, unknown> = { is_active: true }
+    let includeFlat = false
+    const flatWhere: Record<string, unknown> = {}
+
+    if (data.targetType === 'block' && data.targetBlock) {
+      includeFlat = true
+      flatWhere.block = data.targetBlock
+    } else if (data.targetType === 'floor' && data.targetBlock && data.targetFloor) {
+      includeFlat = true
+      flatWhere.block = data.targetBlock
+      flatWhere.floor = data.targetFloor
+    }
+
+    const include = includeFlat
+      ? [{ model: Flat, as: 'flat', where: flatWhere, required: true }]
+      : []
+
+    const targetUsers = await User.findAll({
+      where: userWhere,
+      include,
+      attributes: ['id'],
+    })
+
+    targetUserIds = targetUsers.map((u) => u.id)
   }
-
-  const include = includeFlat
-    ? [{ model: Flat, as: 'flat', where: flatWhere, required: true }]
-    : []
-
-  const targetUsers = await User.findAll({
-    where: userWhere,
-    include,
-    attributes: ['id'],
-  })
-
-  const targetUserIds = targetUsers.map((u) => u.id)
 
   // 3. Bulk create UserNotification rows
   if (targetUserIds.length > 0) {
@@ -170,6 +195,56 @@ export async function getById(notificationId: string): Promise<Notification | nu
         attributes: ['id', 'name'],
       },
     ],
+  })
+}
+
+export interface RecipientSummary {
+  id: string
+  name: string
+  email: string
+  flatLabel: string | null
+}
+
+/**
+ * Lightweight user lookup for the "send to a specific user" picker. Returns
+ * active, non-deleted users matching the search term (name or email), capped.
+ */
+export async function searchRecipients(
+  search: string | undefined,
+  limit = 20,
+): Promise<RecipientSummary[]> {
+  const where: Record<string, unknown> = { is_active: true, deleted_at: null }
+  const term = search?.trim()
+  if (term) {
+    where[Op.or as unknown as string] = [
+      { name: { [Op.iLike]: `%${term}%` } },
+      { email: { [Op.iLike]: `%${term}%` } },
+    ]
+  }
+
+  const users = await User.findAll({
+    where,
+    include: [
+      {
+        model: Flat,
+        as: 'flat',
+        attributes: ['block', 'floor', 'unit_number'],
+        required: false,
+      },
+    ],
+    attributes: ['id', 'name', 'email'],
+    order: [['name', 'ASC']],
+    limit,
+  })
+
+  return users.map((u) => {
+    const flat = (u as unknown as { flat?: Flat }).flat
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      flatLabel: flat ? `${flat.block}-${flat.floor}-${flat.unit_number}` : null,
+    }
   })
 }
 

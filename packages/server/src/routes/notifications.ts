@@ -4,9 +4,29 @@ import * as pushService from '../services/push.service.js'
 import { config } from '../config/index.js'
 
 const CATEGORIES = ['urgent', 'general', 'event'] as const
-const TARGET_TYPES = ['all', 'block', 'floor'] as const
+const TARGET_TYPES = ['all', 'block', 'floor', 'user'] as const
 
 export default async function notificationRoutes(fastify: FastifyInstance) {
+  // GET /api/notifications/recipients — user picker for individual reminders (mgmt/admin)
+  fastify.get(
+    '/api/notifications/recipients',
+    {
+      preHandler: [fastify.authenticate, fastify.rbac(['mgmt_staff', 'admin'])],
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            search: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request) => {
+      const { search } = request.query as { search?: string }
+      return notificationService.searchRecipients(search)
+    }
+  )
+
   // POST /api/notifications — send targeted notification (mgmt/admin)
   fastify.post(
     '/api/notifications',
@@ -29,6 +49,7 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
             targetType: { type: 'string', enum: [...TARGET_TYPES] },
             targetBlock: { type: 'string' },
             targetFloor: { type: 'string' },
+            targetUserId: { type: 'string', format: 'uuid' },
           },
         },
       },
@@ -38,11 +59,12 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         title: string
         body: string
         category: 'urgent' | 'general' | 'event'
-        targetType: 'all' | 'block' | 'floor'
+        targetType: 'all' | 'block' | 'floor' | 'user'
         targetBlock?: string
         targetFloor?: string
+        targetUserId?: string
       }
-      const { targetType, targetBlock, targetFloor } = body
+      const { targetType, targetBlock, targetFloor, targetUserId } = body
 
       if (targetType === 'block' && !targetBlock) {
         return reply.status(400).send({ error: 'targetBlock is required when targetType is block' })
@@ -51,6 +73,9 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return reply
           .status(400)
           .send({ error: 'targetBlock and targetFloor are required when targetType is floor' })
+      }
+      if (targetType === 'user' && !targetUserId) {
+        return reply.status(400).send({ error: 'targetUserId is required when targetType is user' })
       }
 
       const result = await notificationService.send(request.user.id, body, fastify.redis)

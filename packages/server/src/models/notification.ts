@@ -7,9 +7,10 @@ export class Notification extends Model<InferAttributes<Notification>, InferCrea
   declare title: string
   declare body: string
   declare category: 'urgent' | 'general' | 'event'
-  declare target_type: 'all' | 'block' | 'floor'
+  declare target_type: 'all' | 'block' | 'floor' | 'user'
   declare target_block: string | null
   declare target_floor: string | null
+  declare target_user_id: ForeignKey<string> | null
   declare created_at: CreationOptional<Date>
   declare updated_at: CreationOptional<Date>
 }
@@ -42,7 +43,7 @@ Notification.init(
       allowNull: false,
     },
     target_type: {
-      type: DataTypes.ENUM('all', 'block', 'floor'),
+      type: DataTypes.ENUM('all', 'block', 'floor', 'user'),
       allowNull: false,
     },
     target_block: {
@@ -52,6 +53,14 @@ Notification.init(
     target_floor: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    target_user_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
