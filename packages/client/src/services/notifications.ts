@@ -20,6 +20,24 @@ export interface SendNotificationPayload {
   targetType: NotificationTarget;
   targetBlock?: string;
   targetFloor?: string;
+  targetUserId?: string;
+}
+
+export interface RecipientSummary {
+  id: string;
+  name: string;
+  email: string;
+  flatLabel: string | null;
+}
+
+export async function searchRecipients(
+  search?: string,
+): Promise<RecipientSummary[]> {
+  const { data } = await api.get<RecipientSummary[]>(
+    '/api/notifications/recipients',
+    { params: search ? { search } : undefined },
+  );
+  return data;
 }
 
 export async function sendNotification(

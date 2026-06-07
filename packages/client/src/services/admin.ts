@@ -66,6 +66,44 @@ export async function updateStatus(
   return data;
 }
 
+export async function resetUserPassword(
+  userId: string,
+): Promise<{ tempPassword: string }> {
+  const { data } = await api.post<{ tempPassword: string }>(
+    `/api/admin/users/${userId}/reset-password`,
+  );
+  return data;
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await api.delete(`/api/admin/users/${userId}`);
+}
+
+export interface UserFlatSummary {
+  id: string;
+  block: string;
+  floor: string;
+  unit_number: string;
+  is_primary: boolean;
+  linked_at: string | null;
+}
+
+export async function getUserFlats(
+  userId: string,
+): Promise<UserFlatSummary[]> {
+  const { data } = await api.get<{ data: UserFlatSummary[] }>(
+    `/api/admin/users/${userId}/flats`,
+  );
+  return data.data;
+}
+
+export async function unlinkUserFlat(
+  userId: string,
+  flatId: string,
+): Promise<void> {
+  await api.delete(`/api/admin/users/${userId}/flats/${flatId}`);
+}
+
 // ─── Flats ──────────────────────────────────────────────────────
 
 export interface GetFlatsParams {

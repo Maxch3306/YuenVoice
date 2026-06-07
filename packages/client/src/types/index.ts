@@ -167,7 +167,7 @@ export interface OcDocument {
 
 export type NotificationCategory = 'urgent' | 'general' | 'event';
 
-export type NotificationTarget = 'all' | 'block' | 'floor';
+export type NotificationTarget = 'all' | 'block' | 'floor' | 'user';
 
 export interface Notification {
   id: string;
@@ -178,6 +178,7 @@ export interface Notification {
   target_type: NotificationTarget;
   target_block: string | null;
   target_floor: string | null;
+  target_user_id: string | null;
   created_at: string;
   updated_at: string;
   sender?: User;

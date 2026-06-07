@@ -10,6 +10,7 @@ import { useBlocks, useFloors } from '@/services/flats';
 import {
   getNotificationById,
   sendNotification,
+  searchRecipients,
   type SendNotificationPayload,
 } from '@/services/notifications';
 import type {
@@ -54,8 +55,16 @@ function ComposeForm({ prefill }: { prefill: Notification | null }) {
   );
   const [targetBlock, setTargetBlock] = useState(prefill?.target_block ?? '');
   const [targetFloor, setTargetFloor] = useState(prefill?.target_floor ?? '');
+  const [targetUserId, setTargetUserId] = useState('');
+  const [userSearch, setUserSearch] = useState('');
   const [error, setError] = useState('');
   const [successCount, setSuccessCount] = useState<number | null>(null);
+
+  const { data: recipients = [] } = useQuery({
+    queryKey: ['notification-recipients', userSearch],
+    queryFn: () => searchRecipients(userSearch.trim() || undefined),
+    enabled: targetType === 'user',
+  });
 
   const sendMutation = useMutation({
     mutationFn: (payload: SendNotificationPayload) => sendNotification(payload),
@@ -85,14 +94,22 @@ function ComposeForm({ prefill }: { prefill: Notification | null }) {
       setError(t.compose.validationRequired);
       return;
     }
+    if (targetType === 'user' && !targetUserId) {
+      setError(t.compose.validationRequired);
+      return;
+    }
 
     sendMutation.mutate({
       title: title.trim(),
       body: body.trim(),
       category,
       targetType,
-      targetBlock: targetType !== 'all' ? targetBlock : undefined,
+      targetBlock:
+        targetType === 'block' || targetType === 'floor'
+          ? targetBlock
+          : undefined,
       targetFloor: targetType === 'floor' ? targetFloor : undefined,
+      targetUserId: targetType === 'user' ? targetUserId : undefined,
     });
   }
 
@@ -136,6 +153,10 @@ function ComposeForm({ prefill }: { prefill: Notification | null }) {
                     setTargetBlock('');
                     setTargetFloor('');
                   }
+                  if (v !== 'user') {
+                    setTargetUserId('');
+                    setUserSearch('');
+                  }
                 }}
               >
                 <SelectTrigger>
@@ -145,8 +166,38 @@ function ComposeForm({ prefill }: { prefill: Notification | null }) {
                   <SelectItem value="all">{t.compose.targetAll}</SelectItem>
                   <SelectItem value="block">{t.compose.targetBlock}</SelectItem>
                   <SelectItem value="floor">{t.compose.targetFloor}</SelectItem>
+                  <SelectItem value="user">{t.compose.targetUser}</SelectItem>
                 </SelectContent>
               </Select>
+
+              {targetType === 'user' && (
+                <div className="mt-2 space-y-2">
+                  <Input
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder={t.compose.searchUserPlaceholder}
+                  />
+                  {recipients.length === 0 ? (
+                    <p className="px-1 text-sm text-muted-foreground">
+                      {t.compose.noUsersFound}
+                    </p>
+                  ) : (
+                    <Select value={targetUserId} onValueChange={setTargetUserId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t.compose.selectUser} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {recipients.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name}
+                            {r.flatLabel ? ` · ${r.flatLabel}` : ` · ${r.email}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
 
               {(targetType === 'block' || targetType === 'floor') && (
                 <div className="mt-2 grid grid-cols-2 gap-2">

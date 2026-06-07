@@ -1,18 +1,38 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   Search01Icon,
   Add01Icon,
   Copy01Icon,
+  MoreVerticalIcon,
+  LockPasswordIcon,
+  Building01Icon,
+  Notification01Icon,
+  Delete01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
 } from '@hugeicons/core-free-icons';
 
-import { createUser, getUsers, updateRole, updateStatus } from '@/services/admin';
+import {
+  createUser,
+  getUsers,
+  updateRole,
+  updateStatus,
+  resetUserPassword,
+  deleteUser,
+  getUserFlats,
+  unlinkUserFlat,
+  type UserFlatSummary,
+} from '@/services/admin';
+import { sendNotification } from '@/services/notifications';
 import { useT } from '@/lib/i18n';
-import type { UserRole } from '@/types';
+import type { NotificationCategory, UserRole } from '@/types';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -51,7 +71,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export default function UserManagementPage() {
   const queryClient = useQueryClient();
@@ -105,6 +130,38 @@ export default function UserManagementPage() {
     tempPassword: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Reset password confirmation
+  const [resetDialog, setResetDialog] = useState<{
+    userId: string;
+    userName: string;
+    email: string;
+  } | null>(null);
+
+  // Delete confirmation
+  const [deleteDialog, setDeleteDialog] = useState<{
+    userId: string;
+    userName: string;
+  } | null>(null);
+
+  // Manage-flats dialog
+  const [flatsDialog, setFlatsDialog] = useState<{
+    userId: string;
+    userName: string;
+  } | null>(null);
+  const [unlinkConfirm, setUnlinkConfirm] = useState<UserFlatSummary | null>(
+    null,
+  );
+
+  // Send-reminder dialog
+  const [reminderDialog, setReminderDialog] = useState<{
+    userId: string;
+    userName: string;
+  } | null>(null);
+  const [reminderTitle, setReminderTitle] = useState('');
+  const [reminderBody, setReminderBody] = useState('');
+  const [reminderCategory, setReminderCategory] =
+    useState<NotificationCategory>('general');
 
   function openCreateDialog() {
     setFormName('');
@@ -182,6 +239,122 @@ export default function UserManagementPage() {
     },
   });
 
+  function reportError(err: unknown, fallback: string) {
+    const axiosErr = err as { response?: { data?: { error?: string } } };
+    toast.error(axiosErr.response?.data?.error ?? fallback);
+  }
+
+  const resetMutation = useMutation({
+    mutationFn: (userId: string) => resetUserPassword(userId),
+    onSuccess: ({ tempPassword }) => {
+      const target = resetDialog;
+      setResetDialog(null);
+      if (target) {
+        setTempPasswordDialog({
+          name: target.userName,
+          email: target.email,
+          tempPassword,
+        });
+      }
+    },
+    onError: (err) => reportError(err, t.adminUsers.deleteError),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => deleteUser(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      setDeleteDialog(null);
+      toast.success(t.adminUsers.deleteSuccess);
+    },
+    onError: (err) => reportError(err, t.adminUsers.deleteError),
+  });
+
+  const flatsQuery = useQuery({
+    queryKey: ['admin', 'user-flats', flatsDialog?.userId],
+    queryFn: () => getUserFlats(flatsDialog!.userId),
+    enabled: !!flatsDialog,
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: (flatId: string) =>
+      unlinkUserFlat(flatsDialog!.userId, flatId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['admin', 'user-flats', flatsDialog?.userId],
+      });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      setUnlinkConfirm(null);
+      toast.success(t.adminUsers.unlinkSuccess);
+    },
+    onError: (err) => reportError(err, t.adminUsers.deleteError),
+  });
+
+  const reminderMutation = useMutation({
+    mutationFn: () =>
+      sendNotification({
+        title: reminderTitle.trim(),
+        body: reminderBody.trim(),
+        category: reminderCategory,
+        targetType: 'user',
+        targetUserId: reminderDialog!.userId,
+      }),
+    onSuccess: () => {
+      setReminderDialog(null);
+      toast.success(t.adminUsers.reminderSent);
+    },
+    onError: (err) => reportError(err, t.adminUsers.reminderError),
+  });
+
+  function openReminder(userId: string, userName: string) {
+    setReminderTitle('');
+    setReminderBody('');
+    setReminderCategory('general');
+    setReminderDialog({ userId, userName });
+  }
+
+  function renderActions(userId: string, userName: string, email: string) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label={t.adminUsers.actionsLabel}
+          >
+            <HugeiconsIcon icon={MoreVerticalIcon} size={18} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => openReminder(userId, userName)}>
+            <HugeiconsIcon icon={Notification01Icon} size={16} />
+            <span className="ml-2">{t.adminUsers.sendReminder}</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => setFlatsDialog({ userId, userName })}
+          >
+            <HugeiconsIcon icon={Building01Icon} size={16} />
+            <span className="ml-2">{t.adminUsers.manageFlats}</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => setResetDialog({ userId, userName, email })}
+          >
+            <HugeiconsIcon icon={LockPasswordIcon} size={16} />
+            <span className="ml-2">{t.adminUsers.resetPassword}</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => setDeleteDialog({ userId, userName })}
+          >
+            <HugeiconsIcon icon={Delete01Icon} size={16} />
+            <span className="ml-2">{t.adminUsers.deleteUser}</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   const users = data?.data ?? [];
   const meta = data?.meta;
   const totalPages = meta?.totalPages ?? 1;
@@ -253,13 +426,16 @@ export default function UserManagementPage() {
                   <TableHead>{t.adminUsers.colUnit}</TableHead>
                   <TableHead>{t.adminUsers.colRole}</TableHead>
                   <TableHead>{t.adminUsers.colStatus}</TableHead>
+                  <TableHead className="w-12 text-right">
+                    {t.adminUsers.colActions}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={6}
                       className="py-8 text-center text-muted-foreground"
                     >
                       {t.adminUsers.noUsers}
@@ -322,6 +498,9 @@ export default function UserManagementPage() {
                           }
                         />
                       </TableCell>
+                      <TableCell className="text-right">
+                        {renderActions(user.id, user.name, user.email)}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -382,16 +561,19 @@ export default function UserManagementPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Switch
-                      checked={user.is_active}
-                      onCheckedChange={(checked) =>
-                        setStatusDialog({
-                          userId: user.id,
-                          userName: user.name,
-                          newStatus: checked,
-                        })
-                      }
-                    />
+                    <div className="flex items-center gap-1">
+                      <Switch
+                        checked={user.is_active}
+                        onCheckedChange={(checked) =>
+                          setStatusDialog({
+                            userId: user.id,
+                            userName: user.name,
+                            newStatus: checked,
+                          })
+                        }
+                      />
+                      {renderActions(user.id, user.name, user.email)}
+                    </div>
                   </div>
                 </div>
               ))
@@ -645,6 +827,253 @@ export default function UserManagementPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reset Password Confirmation */}
+      <AlertDialog
+        open={!!resetDialog}
+        onOpenChange={(open) => !open && setResetDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t.adminUsers.resetPasswordTitle}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.adminUsers.roleChangeUser}: {resetDialog?.userName}
+              <br />
+              {t.adminUsers.resetPasswordBody}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                resetDialog && resetMutation.mutate(resetDialog.userId)
+              }
+              disabled={resetMutation.isPending}
+            >
+              {resetMutation.isPending
+                ? t.common.updating
+                : t.adminUsers.resetPassword}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete User Confirmation */}
+      <AlertDialog
+        open={!!deleteDialog}
+        onOpenChange={(open) => !open && setDeleteDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.adminUsers.deleteUserTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.adminUsers.roleChangeUser}: {deleteDialog?.userName}
+              <br />
+              {t.adminUsers.deleteUserBody}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                deleteDialog && deleteMutation.mutate(deleteDialog.userId)
+              }
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending
+                ? t.common.deleting
+                : t.adminUsers.deleteUser}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Manage Flats Dialog */}
+      <Dialog
+        open={!!flatsDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFlatsDialog(null);
+            setUnlinkConfirm(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t.adminUsers.manageFlatsTitle}</DialogTitle>
+            <DialogDescription>{flatsDialog?.userName}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {flatsQuery.isLoading ? (
+              <Skeleton className="h-16 w-full" />
+            ) : (flatsQuery.data ?? []).length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t.adminUsers.noFlats}
+              </p>
+            ) : (
+              (flatsQuery.data ?? []).map((flat) => (
+                <div
+                  key={flat.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {t.adminUsers.unitLabel(
+                        flat.block,
+                        flat.floor,
+                        flat.unit_number,
+                      )}
+                    </p>
+                    <Badge variant="outline" className="mt-1">
+                      {flat.is_primary
+                        ? t.adminUsers.primaryFlat
+                        : t.adminUsers.linkedFlat}
+                    </Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t.adminUsers.unlinkFlat}
+                    onClick={() => setUnlinkConfirm(flat)}
+                  >
+                    <HugeiconsIcon icon={Delete01Icon} size={18} />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFlatsDialog(null)}>
+              {t.common.confirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unlink Flat Confirmation */}
+      <AlertDialog
+        open={!!unlinkConfirm}
+        onOpenChange={(open) => !open && setUnlinkConfirm(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.adminUsers.unlinkFlatTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.adminUsers.unlinkFlatBody}
+              {unlinkConfirm && (
+                <>
+                  <br />
+                  {t.adminUsers.unitLabel(
+                    unlinkConfirm.block,
+                    unlinkConfirm.floor,
+                    unlinkConfirm.unit_number,
+                  )}
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                unlinkConfirm && unlinkMutation.mutate(unlinkConfirm.id)
+              }
+              disabled={unlinkMutation.isPending}
+            >
+              {unlinkMutation.isPending
+                ? t.common.deleting
+                : t.adminUsers.unlinkFlat}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Send Reminder Dialog */}
+      <Dialog
+        open={!!reminderDialog}
+        onOpenChange={(open) => !open && setReminderDialog(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t.adminUsers.sendReminderTitle}</DialogTitle>
+            <DialogDescription>{reminderDialog?.userName}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reminder-title">
+                {t.adminUsers.reminderTitleLabel}
+              </Label>
+              <Input
+                id="reminder-title"
+                value={reminderTitle}
+                onChange={(e) => setReminderTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reminder-body">
+                {t.adminUsers.reminderBodyLabel}
+              </Label>
+              <Textarea
+                id="reminder-body"
+                rows={4}
+                value={reminderBody}
+                onChange={(e) => setReminderBody(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t.adminUsers.reminderCategoryLabel}</Label>
+              <Select
+                value={reminderCategory}
+                onValueChange={(v) =>
+                  setReminderCategory(v as NotificationCategory)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">
+                    {t.compose.categoryGeneral}
+                  </SelectItem>
+                  <SelectItem value="urgent">
+                    {t.compose.categoryUrgent}
+                  </SelectItem>
+                  <SelectItem value="event">
+                    {t.compose.categoryEvent}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReminderDialog(null)}
+            >
+              {t.common.cancel}
+            </Button>
+            <Button
+              onClick={() => reminderMutation.mutate()}
+              disabled={
+                reminderMutation.isPending ||
+                !reminderTitle.trim() ||
+                !reminderBody.trim()
+              }
+            >
+              {reminderMutation.isPending
+                ? t.compose.sending
+                : t.adminUsers.sendReminderAction}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
