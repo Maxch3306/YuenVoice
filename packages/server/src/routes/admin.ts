@@ -1,11 +1,12 @@
 import { Op, fn, col, literal } from 'sequelize'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import { User, Flat, AuditLog, IncidentReport, DiscussionPost, OcDocument } from '../models/index.js'
+import { User, Flat, UserFlat, AuditLog, IncidentReport, DiscussionPost, OcDocument } from '../models/index.js'
 import { parsePagination, paginatedResponse } from '../utils/pagination.js'
 import { logAudit } from '../utils/audit.js'
 import { hashPassword } from '../utils/hash.js'
 import { sanitizeText } from '../utils/sanitize.js'
 import { randomBytes } from 'node:crypto'
+import * as userFlatService from '../services/user-flat.service.js'
 
 const ROLES = ['resident', 'oc_committee', 'mgmt_staff', 'admin'] as const
 
@@ -54,7 +55,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       const { offset, limit } = parsePagination(request.query)
       const page = Number(request.query.page) || 1
 
-      const where: Record<string, unknown> = {}
+      const where: Record<string, unknown> = { deleted_at: null }
       if (request.query.role) {
         where.role = request.query.role
       }
@@ -258,6 +259,160 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       })
 
       return user
+    }
+  )
+
+  // POST /api/admin/users/:id/reset-password — issue a new temporary password.
+  // Existing refresh sessions are killed so the old password can't be reused.
+  fastify.post(
+    '/api/admin/users/:id/reset-password',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const user = await User.findByPk(request.params.id)
+      if (!user || user.deleted_at) {
+        return reply.status(404).send({ error: 'User not found' })
+      }
+
+      const tempPassword = randomBytes(6).toString('base64url')
+      user.password_hash = await hashPassword(tempPassword)
+      await user.save()
+
+      await fastify.redis.del(`session:refresh:${user.id}`)
+
+      await logAudit(request.user.id, 'reset_user_password', 'user', user.id, {})
+
+      return { tempPassword }
+    }
+  )
+
+  // DELETE /api/admin/users/:id — soft delete: anonymize PII, drop flat links,
+  // lock the account out, and kill sessions. Reports/posts/audit history stay.
+  fastify.delete(
+    '/api/admin/users/:id',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params
+
+      if (id === request.user.id) {
+        return reply.status(400).send({ error: '不能刪除自己的帳戶' })
+      }
+
+      const user = await User.findByPk(id)
+      if (!user || user.deleted_at) {
+        return reply.status(404).send({ error: 'User not found' })
+      }
+
+      // Guard against removing the last remaining active admin.
+      if (user.role === 'admin') {
+        const otherAdmins = await User.count({
+          where: {
+            role: 'admin',
+            is_active: true,
+            deleted_at: null,
+            id: { [Op.ne]: id },
+          },
+        })
+        if (otherAdmins === 0) {
+          return reply.status(400).send({ error: '不能刪除最後一位系統管理員' })
+        }
+      }
+
+      const originalEmail = user.email
+
+      await user.update({
+        email: `deleted+${id}@yuenvoice.invalid`,
+        name: '已刪除帳戶',
+        phone: null,
+        flat_id: null,
+        is_active: false,
+        deleted_at: new Date(),
+        password_hash: await hashPassword(randomBytes(24).toString('base64url')),
+      })
+
+      await UserFlat.destroy({ where: { user_id: id } })
+      await fastify.redis.del(`session:refresh:${id}`)
+
+      await logAudit(request.user.id, 'delete_user', 'user', id, {
+        email: originalEmail,
+        role: user.role,
+      })
+
+      return reply.status(204).send()
+    }
+  )
+
+  // GET /api/admin/users/:id/flats — list a user's flats (primary + linked)
+  fastify.get(
+    '/api/admin/users/:id/flats',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const user = await User.findByPk(request.params.id, { attributes: ['id', 'deleted_at'] })
+      if (!user || user.deleted_at) {
+        return reply.status(404).send({ error: 'User not found' })
+      }
+      const flats = await userFlatService.listUserFlats(request.params.id)
+      return { data: flats }
+    }
+  )
+
+  // DELETE /api/admin/users/:id/flats/:flatId — unlink any flat (incl. primary)
+  fastify.delete(
+    '/api/admin/users/:id/flats/:flatId',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id', 'flatId'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            flatId: { type: 'string', format: 'uuid' },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { id: string; flatId: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { id, flatId } = request.params
+      await userFlatService.adminUnlinkFlat(id, flatId)
+
+      await logAudit(request.user.id, 'unlink_user_flat', 'user', id, { flat_id: flatId })
+
+      return reply.status(204).send()
     }
   )
 

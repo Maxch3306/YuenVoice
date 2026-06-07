@@ -136,6 +136,32 @@ export async function linkFlat(
 }
 
 /**
+ * Admin unlink: remove any flat from a user's account. Unlike the
+ * self-service path, this can also clear the user's primary unit
+ * (users.flat_id), e.g. to fix a mistaken registration.
+ */
+export async function adminUnlinkFlat(userId: string, flatId: string): Promise<void> {
+  const user = await User.findByPk(userId, { attributes: ['id', 'flat_id'] })
+  if (!user) {
+    throw Object.assign(new Error('User not found'), { statusCode: 404 })
+  }
+
+  if (user.flat_id === flatId) {
+    await user.update({ flat_id: null })
+    // Drop any stray join-table row for the same flat too.
+    await UserFlat.destroy({ where: { user_id: userId, flat_id: flatId } })
+    return
+  }
+
+  const deleted = await UserFlat.destroy({
+    where: { user_id: userId, flat_id: flatId },
+  })
+  if (deleted === 0) {
+    throw Object.assign(new Error('Flat link not found'), { statusCode: 404 })
+  }
+}
+
+/**
  * Unlink an additional flat. Primary flat cannot be unlinked via this endpoint.
  */
 export async function unlinkFlat(userId: string, flatId: string): Promise<void> {

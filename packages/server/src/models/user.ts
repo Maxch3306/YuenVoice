@@ -10,6 +10,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
   declare flat_id: ForeignKey<string> | null
   declare role: 'resident' | 'oc_committee' | 'mgmt_staff' | 'admin'
   declare is_active: CreationOptional<boolean>
+  declare deleted_at: CreationOptional<Date> | null
   declare created_at: CreationOptional<Date>
   declare updated_at: CreationOptional<Date>
 }
@@ -55,6 +56,10 @@ User.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+    },
+    deleted_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     created_at: DataTypes.DATE,
     updated_at: DataTypes.DATE,
