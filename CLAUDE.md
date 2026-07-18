@@ -114,7 +114,7 @@ All core features (Waves 0–5) are **implemented** plus follow-up iterations: a
 
 **Counts:** 16 models, 16 migrations, 7 route modules, 7 service modules, 21 pages.
 
-**Deployment:** GitHub Actions workflow at `.github/workflows/build-images.yml` builds and pushes server + client container images to `ghcr.io/maxch3306/yuenvoice-{server,client}` on every push to `main` and on tags `v*`. Local stack via `docker-compose.yml` (prod) and `docker-compose.dev.yml` (dev).
+**Deployment:** Runs entirely on Cloudflare — a single Worker (Hono) serves the API + the Vite SPA (static assets), backed by D1 (database), Durable Objects (sessions/tokens/push-subs), R2 (uploads), and KV (mutable config, incl. the admin password). Deploy via GitHub Actions workflow `.github/workflows/deploy-cloudflare.yml` (or `wrangler deploy`). See [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md). Worker config in `packages/server/wrangler.jsonc`; local dev via `pnpm --filter server cf:dev` (wrangler dev). The prior Docker/Traefik/GHCR stack has been retired.
 
 ### Not yet built (future work)
 
