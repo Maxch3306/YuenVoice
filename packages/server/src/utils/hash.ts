@@ -2,10 +2,15 @@
 // WASM. Chosen over argon2 because argon2 on Workers requires importing a
 // pre-compiled wasm module (hash-wasm's inline WebAssembly.compile is blocked by
 // the runtime), and there are no legacy argon2 hashes to preserve (fresh D1, no
-// prior production users). PBKDF2 at 600k iterations is OWASP-acceptable.
+// prior production users).
+//
+// NOTE: the Cloudflare Workers runtime caps PBKDF2 at 100_000 iterations
+// (requesting more throws NotSupportedError — enforced in production, though not
+// by local `wrangler dev`). 100k is the max Workers allows. The iteration count
+// is stored in each hash, so verification reads it back per-hash.
 //
 // PHC-like format: pbkdf2-sha256$<iterations>$<saltB64>$<hashB64>
-const ITERATIONS = 600_000
+const ITERATIONS = 100_000
 const KEY_LEN_BITS = 256
 
 function b64(bytes: ArrayBuffer | Uint8Array): string {
