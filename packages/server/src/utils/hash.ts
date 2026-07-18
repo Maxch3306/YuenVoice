@@ -1,10 +1,8 @@
 // Password hashing via WebCrypto PBKDF2-HMAC-SHA256 — 100% Workers-native, no
-// WASM. Chosen because argon2 on Workers requires importing a pre-compiled wasm
-// module (hash-wasm's inline WebAssembly.compile is blocked by the runtime).
-//
-// ⚠️ DECISION PENDING: PBKDF2 does NOT verify legacy node-argon2 hashes. If
-// existing users' passwords must survive the migration, we instead package an
-// argon2 wasm as a Worker module. See Phase 3 notes.
+// WASM. Chosen over argon2 because argon2 on Workers requires importing a
+// pre-compiled wasm module (hash-wasm's inline WebAssembly.compile is blocked by
+// the runtime), and there are no legacy argon2 hashes to preserve (fresh D1, no
+// prior production users). PBKDF2 at 600k iterations is OWASP-acceptable.
 //
 // PHC-like format: pbkdf2-sha256$<iterations>$<saltB64>$<hashB64>
 const ITERATIONS = 600_000
