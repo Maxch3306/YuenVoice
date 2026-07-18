@@ -1,0 +1,68 @@
+{
+  "$schema": "../../node_modules/.pnpm/wrangler@4.112.0_@cloudflare+workers-types@5.20260718.1/node_modules/wrangler/config-schema.json",
+  "name": "yuenvoice",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Serve the built Vite SPA (packages/client/dist) as static assets.
+  // /api/* and /uploads/* run the Worker first; everything else falls back to
+  // index.html for client-side routing (SPA).
+  "assets": {
+    "directory": "../client/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/uploads/*"]
+  },
+
+  // D1 (SQLite) — replaces external Postgres. Run `wrangler d1 create yuenvoice`
+  // and paste the returned database_id below (kept out of local dev, which uses
+  // a local simulation).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "yuenvoice",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "drizzle"
+    }
+  ],
+
+  // R2 — replaces local-disk uploads. Run `wrangler r2 bucket create yuenvoice-uploads`.
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "yuenvoice-uploads"
+    }
+  ],
+
+  // Durable Objects — replaces Redis for sessions / refresh & reset tokens / push subs.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSION_STORE",
+        "class_name": "SessionStore"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SessionStore"]
+    }
+  ],
+
+  // Non-secret config. Secrets (JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
+  // VAPID_PRIVATE_KEY, ADMIN_PASSWORD) are set via `wrangler secret put` and,
+  // for local dev, .dev.vars.
+  "vars": {
+    "NODE_ENV": "production",
+    "API_PREFIX": "/api",
+    "VAPID_SUBJECT": "mailto:admin@yuenvoice.app",
+    "UPLOAD_MAX_SIZE": "10485760",
+    "ADMIN_EMAIL": "admin@yuenvoice.app",
+    "ADMIN_NAME": "System Admin"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
