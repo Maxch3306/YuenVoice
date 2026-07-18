@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import type { AppBindings } from '../env.js'
+import { HttpError } from './errors.js'
+import authRoutes from './routes/auth.js'
 
 // Builds the Hono application. The Worker serves the SPA via static assets and
 // only receives /api/* and /uploads/* (see run_worker_first in wrangler.jsonc),
@@ -23,13 +25,16 @@ export function createApp() {
 
   app.get('/api/health', (c) => c.json({ status: 'ok', runtime: 'workers' }))
 
-  // Route groups mounted here in Phase 4:
-  //   app.route('/api/auth', authRoutes)
+  app.route('/api/auth', authRoutes)
+  // Remaining route groups mounted here in Phase 4:
   //   app.route('/api/reports', reportRoutes)
   //   ...
 
   app.notFound((c) => c.json({ error: 'Not found' }, 404))
   app.onError((err, c) => {
+    if (err instanceof HttpError) {
+      return c.json({ error: err.message }, err.statusCode as 400)
+    }
     console.error('Unhandled error:', err)
     return c.json({ error: 'Internal server error' }, 500)
   })
