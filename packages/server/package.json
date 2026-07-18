@@ -47,6 +47,7 @@
     "sequelize": "^6.37.8",
     "umzug": "^3.8.2",
     "web-push": "^3.6.7",
+    "xss": "^1.0.15",
     "zod": "^4.4.3"
   },
   "devDependencies": {

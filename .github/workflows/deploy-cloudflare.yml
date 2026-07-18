@@ -1,0 +1,50 @@
+name: Deploy to Cloudflare
+
+# Builds the SPA, applies D1 migrations, and deploys the Worker (API + static
+# assets) to Cloudflare. Requires repo secret CLOUDFLARE_API_TOKEN (a token with
+# Workers Scripts, D1, and Workers R2 edit permissions) and CLOUDFLARE_ACCOUNT_ID.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/server/**'
+      - 'packages/client/**'
+      - 'pnpm-lock.yaml'
+
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build the client SPA into packages/client/dist (served as Worker assets).
+      - run: pnpm --filter client build
+
+      # Typecheck the Worker before deploying.
+      - run: pnpm --filter server cf:typecheck
+
+      # Apply any pending D1 migrations to the remote database.
+      - run: pnpm --filter server d1:migrate:remote
+
+      # Deploy the Worker (uploads the SPA assets + API).
+      - run: pnpm --filter server cf:deploy

@@ -5,6 +5,13 @@ import type { AppBindings } from '../env.js'
 import { HttpError } from './errors.js'
 import authRoutes from './routes/auth.js'
 import reportRoutes from './routes/reports.js'
+import discussionRoutes from './routes/discussions.js'
+import ocDocumentRoutes from './routes/oc-documents.js'
+import notificationRoutes, { push as pushRoutes } from './routes/notifications.js'
+import userFlatRoutes from './routes/user-flats.js'
+import adminRoutes from './routes/admin.js'
+import flatRoutes from './routes/flats.js'
+import uploadRoutes from './routes/uploads.js'
 
 // Builds the Hono application. The Worker serves the SPA via static assets and
 // only receives /api/* and /uploads/* (see run_worker_first in wrangler.jsonc),
@@ -28,12 +35,20 @@ export function createApp() {
 
   app.route('/api/auth', authRoutes)
   app.route('/api/reports', reportRoutes)
-  // Remaining route groups mounted here as Phase 4 domains land:
-  //   app.route('/api/discussions', discussionRoutes)
-  //   app.route('/api/oc-documents', ocDocumentRoutes)
-  //   app.route('/api/notifications', notificationRoutes)
-  //   app.route('/api/users', userFlatRoutes)
-  //   app.route('/api/admin', adminRoutes)
+  app.route('/api/oc-documents', ocDocumentRoutes)
+  app.route('/api/notifications', notificationRoutes)
+  app.route('/api/push', pushRoutes)
+  app.route('/api/users', userFlatRoutes)
+  app.route('/api/admin', adminRoutes)
+  app.route('/api/flats', flatRoutes)
+  // Discussions declares /boards and /posts, so it mounts at /api (matching the
+  // client's /api/boards and /api/posts). Registered LAST: its internal
+  // `use('*', requireAuth())` would otherwise gate sibling /api routes (e.g. the
+  // public /api/flats/*) mounted after it — order makes those respond first.
+  app.route('/api', discussionRoutes)
+
+  // Serve uploaded files from R2 (outside /api).
+  app.route('/uploads', uploadRoutes)
 
   app.notFound((c) => c.json({ error: 'Not found' }, 404))
   app.onError((err, c) => {
