@@ -70,7 +70,7 @@
     "VAPID_SUBJECT": "mailto:admin@yuenvoice.app",
     // Public VAPID key (safe to commit). Paste the public half of the keypair
     // you generate for push; leave empty to disable push (endpoints return 503).
-    "VAPID_PUBLIC_KEY": "",
+    "VAPID_PUBLIC_KEY": "BK1tei0f1xzSU14EjwTOnNx3_rsPF70bQP12uz1QkRgTEkCuSbayr1DDNhX2FWOAmdTm4p7Kdvo5B1j1NuLNOT0",
     "UPLOAD_MAX_SIZE": "10485760",
     "ADMIN_EMAIL": "admin@yuenvoice.app",
     "ADMIN_NAME": "System Admin"
