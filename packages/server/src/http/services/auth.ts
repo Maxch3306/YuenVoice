@@ -23,6 +23,31 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 const RESET_TTL_MS = 60 * 60 * 1000 // 1 hour
 const SESSION_KEY = 'session'
 const RESET_KEY = 'reset'
+const ADMIN_PW_KEY = 'admin:password'
+
+// Reconcile the admin account password from KV. `CONFIG['admin:password']` is
+// the source of truth: editing that KV value rotates the admin password (applied
+// on the next admin login) — no redeploy or DB surgery needed. Bootstraps the
+// admin row if it is missing. No-op when the KV key is unset.
+async function ensureAdminFromKv(env: Env, db: Db): Promise<void> {
+  const kvPassword = await env.CONFIG.get(ADMIN_PW_KEY)
+  if (!kvPassword) return
+
+  const [admin] = await db.select().from(users).where(eq(users.email, env.ADMIN_EMAIL)).limit(1)
+  if (!admin) {
+    await db.insert(users).values({
+      email: env.ADMIN_EMAIL,
+      password_hash: await hashPassword(kvPassword),
+      name: env.ADMIN_NAME,
+      role: 'admin',
+    })
+    return
+  }
+  // KV value changed since it was last synced → re-hash and update D1.
+  if (!(await comparePassword(kvPassword, admin.password_hash))) {
+    await db.update(users).set({ password_hash: await hashPassword(kvPassword) }).where(eq(users.id, admin.id))
+  }
+}
 
 function toSafeUser(u: UserRow): SafeUser {
   return { id: u.id, name: u.name, email: u.email, role: u.role }
@@ -116,6 +141,12 @@ export async function login(
   db: Db,
   data: { email: string; password: string },
 ): Promise<{ user: SafeUser; accessToken: string; refreshToken: string }> {
+  // Admin password is KV-managed: reconcile it into D1 before verifying so a
+  // rotated KV value takes effect on this login.
+  if (data.email === env.ADMIN_EMAIL) {
+    await ensureAdminFromKv(env, db)
+  }
+
   const [user] = await db.select().from(users).where(eq(users.email, data.email)).limit(1)
   if (!user) throw new HttpError(401, 'Invalid email or password')
   if (!user.is_active) throw new HttpError(401, 'Account is deactivated')

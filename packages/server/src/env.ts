@@ -7,6 +7,7 @@ export interface Env {
   DB: D1Database
   UPLOADS: R2Bucket
   SESSION_STORE: DurableObjectNamespace<SessionStore>
+  CONFIG: KVNamespace
 
   // Vars (non-secret)
   NODE_ENV: string
@@ -22,7 +23,6 @@ export interface Env {
   JWT_ACCESS_SECRET: string
   JWT_REFRESH_SECRET: string
   VAPID_PRIVATE_KEY: string
-  ADMIN_PASSWORD: string
 }
 
 // Hono generic: c.env is typed as Env, c.var holds middleware-set values.

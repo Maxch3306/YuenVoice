@@ -1,41 +1,16 @@
-// Generates seed SQL for a fresh D1 database: reference flats, discussion
-// boards, and the admin account (PBKDF2-hashed, matching src/utils/hash.ts).
-// Output goes to scripts/seed.sql, applied via `pnpm --filter server seed:local`
-// or `seed:remote`. Admin credentials come from env (ADMIN_EMAIL / ADMIN_PASSWORD
-// / ADMIN_NAME), defaulting to the dev values.
+// Generates seed SQL for a fresh D1 database: reference flats and discussion
+// boards. Output goes to scripts/seed.sql, applied via `pnpm --filter server
+// seed:local` or `seed:remote`.
 //
-// Flats + boards use plain INSERTs (intended for a fresh DB, run once). The admin
-// row is idempotent (INSERT ... WHERE NOT EXISTS).
+// The admin account is NOT seeded here — it is KV-managed: set
+// `CONFIG['admin:password']` (see README/deploy notes) and it bootstraps into D1
+// on the first admin login. Flats + boards use plain INSERTs (fresh DB, run once).
 
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@yuenvoice.app'
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
-const ADMIN_NAME = process.env.ADMIN_NAME || 'System Admin'
-
-// ── PBKDF2 hashing (identical params to src/utils/hash.ts) ──
-async function hashPassword(plain) {
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(plain), 'PBKDF2', false, [
-    'deriveBits',
-  ])
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 600_000, hash: 'SHA-256' },
-    key,
-    256,
-  )
-  const b64 = (b) => {
-    const a = new Uint8Array(b)
-    let s = ''
-    for (const x of a) s += String.fromCharCode(x)
-    return btoa(s)
-  }
-  return `pbkdf2-sha256$600000$${b64(salt)}$${b64(bits)}`
-}
 
 const sqlStr = (v) => (v === null || v === undefined ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`)
 const now = '2026-01-01T00:00:00.000Z'
@@ -96,17 +71,9 @@ async function main() {
     boards.push({ id: crypto.randomUUID(), name: `Block ${b} / 第${b}座討論`, scope_type: 'block', scope_block: String(b), scope_floor: null, created_at: now })
   lines.push(batchedInsert('discussion_boards', ['id', 'name', 'scope_type', 'scope_block', 'scope_floor', 'created_at'], boards))
 
-  // Admin account (idempotent).
-  const adminHash = await hashPassword(ADMIN_PASSWORD)
-  lines.push(
-    `INSERT INTO users (id, email, phone, password_hash, name, flat_id, role, is_active, created_at, updated_at)\n` +
-      `SELECT ${sqlStr(crypto.randomUUID())}, ${sqlStr(ADMIN_EMAIL)}, NULL, ${sqlStr(adminHash)}, ${sqlStr(ADMIN_NAME)}, NULL, 'admin', 1, ${sqlStr(now)}, ${sqlStr(now)}\n` +
-      `WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = ${sqlStr(ADMIN_EMAIL)});`,
-  )
-
   const outPath = join(__dirname, 'seed.sql')
   writeFileSync(outPath, lines.join('\n\n') + '\n', 'utf8')
-  console.log(`Wrote ${outPath} (${flats.length} flats, ${boards.length} boards, admin ${ADMIN_EMAIL})`)
+  console.log(`Wrote ${outPath} (${flats.length} flats, ${boards.length} boards)`)
 }
 
 main()

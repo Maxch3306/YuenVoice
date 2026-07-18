@@ -34,6 +34,17 @@
     }
   ],
 
+  // KV — mutable runtime config. Holds `admin:password` (plaintext), the source
+  // of truth for the admin account password: edit it to rotate the password
+  // without a redeploy (reconciled into D1 on the next admin login). Treat this
+  // namespace as sensitive.
+  "kv_namespaces": [
+    {
+      "binding": "CONFIG",
+      "id": "e934f708e6ff44fd98402b9f6056549d"
+    }
+  ],
+
   // Durable Objects — replaces Redis for sessions / refresh & reset tokens / push subs.
   "durable_objects": {
     "bindings": [
