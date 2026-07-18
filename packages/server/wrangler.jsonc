@@ -57,6 +57,9 @@
     "NODE_ENV": "production",
     "API_PREFIX": "/api",
     "VAPID_SUBJECT": "mailto:admin@yuenvoice.app",
+    // Public VAPID key (safe to commit). Paste the public half of the keypair
+    // you generate for push; leave empty to disable push (endpoints return 503).
+    "VAPID_PUBLIC_KEY": "",
     "UPLOAD_MAX_SIZE": "10485760",
     "ADMIN_EMAIL": "admin@yuenvoice.app",
     "ADMIN_NAME": "System Admin"

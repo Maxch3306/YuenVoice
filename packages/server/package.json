@@ -18,7 +18,10 @@
     "cf:typecheck": "tsc -p tsconfig.worker.json",
     "d1:generate": "drizzle-kit generate",
     "d1:migrate:local": "wrangler d1 migrations apply yuenvoice --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply yuenvoice --remote"
+    "d1:migrate:remote": "wrangler d1 migrations apply yuenvoice --remote",
+    "seed:gen": "node scripts/seed.mjs",
+    "seed:local": "node scripts/seed.mjs && wrangler d1 execute yuenvoice --local --file scripts/seed.sql",
+    "seed:remote": "node scripts/seed.mjs && wrangler d1 execute yuenvoice --remote --file scripts/seed.sql"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
