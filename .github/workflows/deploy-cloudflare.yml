@@ -1,8 +1,16 @@
 name: Deploy to Cloudflare
 
 # Builds the SPA, applies D1 migrations, and deploys the Worker (API + static
-# assets) to Cloudflare. Requires repo secret CLOUDFLARE_API_TOKEN (a token with
-# Workers Scripts, D1, and Workers R2 edit permissions) and CLOUDFLARE_ACCOUNT_ID.
+# assets) to Cloudflare.
+#
+# Required repo secrets:
+#   CLOUDFLARE_API_TOKEN   — token with Workers Scripts:Edit, D1:Edit, Workers KV:Edit,
+#                            Workers R2 Storage:Edit on the target account
+#   CLOUDFLARE_ACCOUNT_ID  — the Cloudflare account id
+#
+# Worker runtime secrets (JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, VAPID_PRIVATE_KEY)
+# and the admin password (CONFIG KV 'admin:password') are set once out-of-band via
+# `wrangler secret put` / `wrangler kv key put`, NOT by this workflow.
 
 on:
   workflow_dispatch:
@@ -12,6 +20,7 @@ on:
       - 'packages/server/**'
       - 'packages/client/**'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-cloudflare.yml'
 
 concurrency:
   group: deploy-cloudflare
@@ -40,7 +49,8 @@ jobs:
       # Build the client SPA into packages/client/dist (served as Worker assets).
       - run: pnpm --filter client build
 
-      # Typecheck the Worker before deploying.
+      # Regenerate binding types from wrangler.jsonc, then typecheck the Worker.
+      - run: pnpm --filter server cf:types
       - run: pnpm --filter server cf:typecheck
 
       # Apply any pending D1 migrations to the remote database.
