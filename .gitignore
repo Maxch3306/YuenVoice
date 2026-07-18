@@ -53,3 +53,5 @@ skills-lock.json
 
 # Pencil mockups (large binary)
 *.pen
+.dev.vars
+.wrangler/

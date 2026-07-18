@@ -1,0 +1,6 @@
+# Local dev secrets for `wrangler dev` (copy to .dev.vars — which is gitignored).
+# In production these are set with `wrangler secret put <NAME>`.
+JWT_ACCESS_SECRET=dev-access-secret-change-in-production
+JWT_REFRESH_SECRET=dev-refresh-secret-change-in-production
+VAPID_PRIVATE_KEY=
+ADMIN_PASSWORD=admin123
