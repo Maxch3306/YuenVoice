@@ -21,7 +21,7 @@
     {
       "binding": "DB",
       "database_name": "yuenvoice",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "1bab66a3-e82f-47a7-9b28-ee2b12267cda",
       "migrations_dir": "drizzle"
     }
   ],
