@@ -4,6 +4,7 @@ import { secureHeaders } from 'hono/secure-headers'
 import type { AppBindings } from '../env.js'
 import { HttpError } from './errors.js'
 import authRoutes from './routes/auth.js'
+import reportRoutes from './routes/reports.js'
 
 // Builds the Hono application. The Worker serves the SPA via static assets and
 // only receives /api/* and /uploads/* (see run_worker_first in wrangler.jsonc),
@@ -26,9 +27,13 @@ export function createApp() {
   app.get('/api/health', (c) => c.json({ status: 'ok', runtime: 'workers' }))
 
   app.route('/api/auth', authRoutes)
-  // Remaining route groups mounted here in Phase 4:
-  //   app.route('/api/reports', reportRoutes)
-  //   ...
+  app.route('/api/reports', reportRoutes)
+  // Remaining route groups mounted here as Phase 4 domains land:
+  //   app.route('/api/discussions', discussionRoutes)
+  //   app.route('/api/oc-documents', ocDocumentRoutes)
+  //   app.route('/api/notifications', notificationRoutes)
+  //   app.route('/api/users', userFlatRoutes)
+  //   app.route('/api/admin', adminRoutes)
 
   app.notFound((c) => c.json({ error: 'Not found' }, 404))
   app.onError((err, c) => {
