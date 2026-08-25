@@ -2,30 +2,63 @@
 
 YUENVOICE is a bilingual (English + Traditional Chinese) PWA for a Hong Kong housing estate — connecting residents (業戶), the Owners' Corporation (業主立案法團), and the property management office (管理處).
 
+It runs entirely on Cloudflare: **one Worker** (Hono) serves the API *and* the Vite SPA, backed by D1, Durable Objects, R2, and KV. There is no Node server, no Postgres, and no Redis in the deployed system.
+
 ## Tech Stack
 
 - **Frontend**: Vite + React 19 + TypeScript + shadcn/ui + Tailwind CSS v4
-- **Backend**: Fastify 5 (Node.js), ESM (`"type": "module"`)
-- **Database**: PostgreSQL + Sequelize ORM + Umzug (auto-migration on startup)
-- **Cache/Realtime**: Redis (ioredis — sessions, push subscriptions, pub/sub)
-- **Auth**: JWT (access 15min + refresh 7d httpOnly cookie), flat-based registration
-- **Push**: Web Push API (VAPID) via `web-push`
+- **Backend**: Hono 4 on Cloudflare Workers, ESM (`"type": "module"`)
+- **Database**: Cloudflare D1 (SQLite) + Drizzle ORM + `wrangler d1 migrations`
+- **Sessions / tokens / push subs**: Durable Object `SessionStore` (replaces Redis)
+- **File storage**: R2 bucket `yuenvoice-uploads` (replaces local disk)
+- **Mutable config**: KV namespace `CONFIG` (holds `admin:password`)
+- **Auth**: JWT via `jose` (access 15min + refresh 7d httpOnly cookie), flat-based registration
+- **Password hashing**: WebCrypto PBKDF2-HMAC-SHA256, 100k iterations (`utils/hash.ts`)
+- **Validation**: Zod + `@hono/zod-validator`; sanitization via `xss`
+- **Push**: Web Push API (VAPID) via `@mmmike/web-push` (Workers-compatible)
 - **Monorepo**: pnpm workspaces — `packages/client/` and `packages/server/`
-- **Testing**: Vitest + Supertest (server), Vitest + Testing Library (client)
+- **Testing**: Vitest (both packages) + Testing Library (client)
+
+### Retired stack still in the repo
+
+`packages/server/` also contains the **pre-Cloudflare Fastify/Sequelize/Postgres/Redis
+implementation**, which is dead code — not deployed, not reachable from `src/worker.ts`:
+
+| Retired (do not extend) | Live equivalent |
+|---|---|
+| `src/index.ts`, `src/app.ts` (Fastify) | `src/worker.ts`, `src/http/app.ts` (Hono) |
+| `src/routes/`, `src/services/` | `src/http/routes/`, `src/http/services/` |
+| `src/models/` (Sequelize), `migrations/`, `seeders/` | `src/db/schema.ts` (Drizzle), `drizzle/`, `scripts/seed.mjs` |
+| `src/plugins/`, `src/middleware/rate-limit.ts` | `src/http/middleware/`, `src/http/upload.ts` |
+| `src/__tests__/` (builds the Fastify app) | no Worker test suite yet |
+
+`src/utils/` is shared in name only — `hash.ts` is the live Workers PBKDF2 implementation;
+`setup.ts` / `env-validator.ts` belong to the retired Node path.
+
+**All new server work goes in `src/http/` and `src/db/schema.ts`.** Treat the retired tree
+as removable; do not mirror changes into it.
 
 ## Commands
 
 ```bash
-pnpm install                          # Install all workspace deps
-pnpm dev                              # Run client (5173) + server (3001) concurrently
-pnpm build                            # Build both packages
-pnpm lint                             # Lint both packages
-pnpm --filter server dev              # Server only (auto-runs pending migrations)
-pnpm --filter server test             # Server tests
-pnpm --filter client dev              # Client only
-pnpm --filter client test             # Client tests
-pnpm --filter client typecheck        # TypeScript check without emit
+pnpm install                            # Install all workspace deps
+pnpm --filter client dev                # SPA dev server (5173)
+pnpm --filter server cf:dev             # Worker via wrangler dev (8787) — the real backend
+pnpm --filter server cf:typecheck       # Typecheck the Worker (tsconfig.worker.json)
+pnpm --filter server cf:types           # Regenerate binding types (worker-configuration.d.ts)
+pnpm --filter server d1:generate        # Generate a D1 migration from schema.ts changes
+pnpm --filter server d1:migrate:local   # Apply migrations to the local D1 simulation
+pnpm --filter server d1:migrate:remote  # Apply migrations to production D1
+pnpm --filter server seed:local         # Seed flats + discussion boards locally
+pnpm --filter server cf:deploy          # wrangler deploy
+pnpm --filter client build              # Build the SPA (Worker serves packages/client/dist)
+pnpm --filter client typecheck          # TypeScript check without emit
+pnpm --filter client test               # Client tests
+pnpm lint                               # Lint both packages
 ```
+
+`pnpm dev` and `pnpm --filter server dev|test|db:*` still drive the **retired** Fastify stack
+and need Postgres + Redis. Use `cf:dev` for backend work.
 
 ## MUST / MUST NOT Rules
 
@@ -33,32 +66,36 @@ pnpm --filter client typecheck        # TypeScript check without emit
 
 - **MUST** use atomic commits — one logical change per commit (e.g., don't mix a bug fix with a refactor or docs update)
 - **MUST** write commit messages that explain *why*, not just *what*
-- **MUST** commit migration + model + route/service changes together when they form one feature
+- **MUST** commit schema + migration + route/service changes together when they form one feature
 - **MUST NOT** commit unrelated changes in the same commit
 
-### Database
+### Database (D1 + Drizzle)
 
-- **MUST** create a new migration file for every schema change — never use `sequelize.sync()` or `alter: true`
-- **MUST** use `.cjs` format, timestamped name: `YYYYMMDDHHMMSS-description.cjs`
-- **MUST** include both `up` and `down` functions in migrations
-- **MUST** update the corresponding model in `src/models/` to match any migration
-- **MUST NOT** modify an existing migration that has already been run — create a new one
-- Migrations auto-run on server startup via Umzug (no manual `db:migrate` needed in dev)
+- **MUST** change `src/db/schema.ts` first, then run `pnpm --filter server d1:generate` to emit SQL into `drizzle/`
+- **MUST NOT** hand-edit a generated migration that has already been applied — change the schema and generate a new one
+- **MUST NOT** use `sequelize.sync()`, `drizzle-kit push`, or any auto-alter against a live database
+- **MUST** apply migrations explicitly — they do **not** auto-run on Worker start (`d1:migrate:local` / `:remote`, and CI runs `:remote` before deploy)
+- **MUST** keep column names snake_case (the client consumes that shape) and generate UUID PKs / ISO-8601 timestamps app-side via the helpers at the top of `schema.ts`
+- **MUST NOT** add Postgres-only types — D1 is SQLite (booleans are `integer({mode:'boolean'})`, JSON is `text({mode:'json'})`)
 
 ### Server Code
 
 - **MUST** use `.js` extensions in all ESM import paths
-- **MUST** follow the plugin registration order in `src/app.ts` — do not reorder
-- **MUST** use the service layer pattern: route handler → service function → model/Redis
-- **MUST** use Argon2id for password hashing (via `utils/hash.ts`)
-- **MUST** log audit entries for all state-changing operations by mgmt/admin roles (via `utils/audit.ts`)
-- **MUST** validate file uploads by magic bytes (via `plugins/upload.ts`)
+- **MUST** follow the route mount order in `src/http/app.ts` — `discussionRoutes` mounts at `/api` **last** because its blanket `use('*', requireAuth())` would otherwise gate sibling `/api` routes
+- **MUST** use the service layer pattern: Hono handler → `src/http/services/*` → Drizzle/Durable Object/R2
+- **MUST** reach state through bindings on `c.env` (`DB`, `UPLOADS`, `SESSION_STORE`, `CONFIG`) — no module-level clients, no global mutable state (Workers isolates are reused across requests)
+- **MUST** hash passwords with `utils/hash.ts` (PBKDF2). **MUST NOT** raise the iteration count above 100_000 — the Workers runtime rejects more (`NotSupportedError`), and `wrangler dev` will *not* catch it
+- **MUST** validate request input with Zod via `@hono/zod-validator`, and sanitize user text with `http/sanitize.ts`
+- **MUST** log audit entries for all state-changing operations by mgmt/admin roles (via `http/audit.ts`)
+- **MUST** validate file uploads by magic bytes (via `http/upload.ts`) — never trust the client MIME type
+- **MUST** throw `HttpError` from `http/errors.ts` for expected failures; `app.onError` maps it to JSON
+- Use only Workers-compatible APIs: no `fs`, no Node crypto, no long-lived sockets
 
-### Redis Key Type Changes
+### Durable Object state (SessionStore)
 
-- **MUST** guard against legacy key types when changing a Redis key's data structure (e.g., string → hash)
-- **MUST** check `redis.type(key)` before operating and migrate/delete old keys to avoid `WRONGTYPE` errors
-- **MUST NOT** assume Redis keys are a specific type — production may have old keys from prior code
+- **MUST** address stores through the helpers in `http/session-store.ts` — `userStore(env, userId)` (`session:refresh`, `push:sub`) and `tokenStore(env, token)` (password-reset tokens). Sharding by entity is what makes refresh-token rotation strongly consistent
+- **MUST** pass a TTL when writing anything session- or token-scoped; the DO's `alarm()` sweeps expirations
+- **MUST NOT** store a raw refresh/reset token — store its SHA-256 (`http/crypto.ts`)
 
 ### Client Code
 
@@ -76,18 +113,20 @@ pnpm --filter client typecheck        # TypeScript check without emit
 
 ## Key Architecture Decisions
 
-> For full details, see [docs/architecture.md](docs/architecture.md)
+> For full details, see [docs/architecture.md](docs/architecture.md) and [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md)
 
-- **4 user roles**: `resident`, `oc_committee`, `mgmt_staff`, `admin` — enforced via RBAC preHandler
+- **Single Worker, two surfaces**: `wrangler.jsonc` `assets.run_worker_first: ["/api/*", "/uploads/*"]` — everything else falls back to `index.html` for SPA routing. Same-origin by default, so the httpOnly refresh cookie needs no CORS (CORS only activates when `CLIENT_ORIGIN` is set).
+- **4 user roles**: `resident`, `oc_committee`, `mgmt_staff`, `admin` — enforced via `requireAuth()` + `requireRole()` middleware.
 - **OC committee is review-only**: can read every report + mgmt response and every discussion post, but cannot file tickets, leave comments, or author posts. Reactions and post flags stay open. Mgmt/admin/resident retain write access. Residents see only their own reports.
-- **Flat registration**: residents provide their flat's pre-assigned password (argon2-hashed) to register. `User.flat_id` is **nullable** so admins can create non-resident mgmt/committee accounts without a flat.
+- **Flat registration**: residents provide their flat's pre-assigned password (PBKDF2-hashed) to register. `users.flat_id` is **nullable** so admins can create non-resident mgmt/committee accounts without a flat.
+- **Admin password lives in KV**, not in a seed: `CONFIG['admin:password']` is the source of truth. The admin row bootstraps/reconciles from it on the next admin login, so rotating the password is a `wrangler kv key put` with no redeploy.
 - **Multi-unit owners**: residents who own more than one flat link extra units via `user_flats` (composite PK), surfaced through `/api/users/me/flats` and the `/profile/flats` page. Discussion-board scoping uses every linked flat's block/floor.
-- **Anonymous posting**: `is_anonymous` flag; real `author_id` stored but responses show "匿名業戶"
+- **Anonymous posting**: `is_anonymous` flag; real `author_id` stored but responses show "匿名業戶".
 - **Auto-reopen on follow-up**: a non-mgmt comment on a `completed` report transitions it back to `in_progress`, writes an audit entry, and notifies all mgmt/admin users (DB + web push, fire-and-forget). Once a report has been auto-reopened 3+ times, an additional escalation notification is fanned out to all `oc_committee` users on the 3rd and every subsequent reopen. The UI warns residents before they comment.
-- **File uploads**: stored at `uploads/{entity}/{yyyy-mm}/{uuid}.{ext}`, validated by magic bytes
+- **File uploads**: R2 objects keyed `{entity}/{yyyy-mm}/{uuid}.{ext}`, validated by magic bytes, served from `/uploads/*` with `immutable` caching. Keys are unguessable UUIDs and the route is **unauthenticated** — treat an upload URL as a capability.
+- **Notifications**: `target_type` is `all | block | floor | user`; per-recipient rows in `user_notifications` carry read state, and web push is fire-and-forget so a push failure never fails the request.
 - **OC documents**: support both file-backed (PDF/image upload) and link-backed (`external_url` + `link_type` enum: `google_meet` / `google_drive` / `google_site`) — used for meeting livestreams and recordings.
-- **Model conventions**: UUID PKs, `underscored: true` (camelCase → snake_case), `timestamps: true`, no soft deletes
-- **Sequelize instance**: extracted to `src/models/sequelize.ts` to avoid circular imports; associations in `src/models/index.ts`
+- **Soft delete**: only `users.deleted_at` (admin soft-delete). No other table soft-deletes; the audit log is the record of destructive actions.
 
 ## UI/Design System
 
@@ -103,6 +142,7 @@ pnpm --filter client typecheck        # TypeScript check without emit
 |----------|-------------|
 | [docs/PRD.md](docs/PRD.md) | Adding features, clarifying business rules, checking permission matrix |
 | [docs/architecture.md](docs/architecture.md) | Making architectural decisions, adding integrations, checking DB schema |
+| [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md) | Provisioning resources, rotating secrets, deploying, local Worker dev |
 | [docs/ui/sitemap.md](docs/ui/sitemap.md) | Adding pages, modifying navigation, checking user flows |
 | [docs/ui/pages/](docs/ui/pages/) | Implementing or modifying specific page UIs (wireframes + component specs) |
 | [design-system/yuenvoice/MASTER.md](design-system/yuenvoice/MASTER.md) | Styling components, choosing design tokens, checking color/typography |
@@ -110,16 +150,23 @@ pnpm --filter client typecheck        # TypeScript check without emit
 
 ## Implementation Status
 
-All core features (Waves 0–5) are **implemented** plus follow-up iterations: auth, reports, discussion boards, OC documents, notifications, admin dashboard, PWA, multi-unit owner support, OC committee review-only role, auto-reopen on resident follow-up, and CI image build.
+All core features (Waves 0–5) are implemented, plus follow-up iterations (multi-unit owners,
+OC committee review-only role, auto-reopen + escalation, link-backed OC documents, manual
+notification compose, admin user/flat CRUD) — and the whole backend has since been ported
+from Fastify/Postgres/Redis to Hono/D1/Durable Objects on Cloudflare Workers.
 
-**Counts:** 16 models, 16 migrations, 7 route modules, 7 service modules, 21 pages.
+**Counts (live Workers path):** 15 D1 tables, 9 route modules, 8 service modules, 20 client pages.
 
-**Deployment:** Runs entirely on Cloudflare — a single Worker (Hono) serves the API + the Vite SPA (static assets), backed by D1 (database), Durable Objects (sessions/tokens/push-subs), R2 (uploads), and KV (mutable config, incl. the admin password). Deploy via GitHub Actions workflow `.github/workflows/deploy-cloudflare.yml` (or `wrangler deploy`). See [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md). Worker config in `packages/server/wrangler.jsonc`; local dev via `pnpm --filter server cf:dev` (wrangler dev). The prior Docker/Traefik/GHCR stack has been retired.
+**Deployment:** GitHub Actions workflow `.github/workflows/deploy-cloudflare.yml` (or `wrangler deploy`)
+builds the SPA, regenerates binding types, typechecks the Worker, applies pending D1 migrations,
+and deploys. Worker config in `packages/server/wrangler.jsonc`. The prior Docker/Traefik/GHCR
+stack has been retired.
 
-### Not yet built (future work)
+### Not yet built / known gaps
 
-- Password reset routes (`/auth/forgot-password`, `/auth/reset-password`) and SMS/email provider — UI pages exist, server endpoints not yet wired
-- S3 file storage (local filesystem only — `UPLOAD_PROVIDER=local`)
-- Real-time WebSocket/SSE (currently polling via TanStack Query + Redis pub/sub for fan-out)
+- **Rate limiting** — the retired Fastify stack had per-route limits; the Worker has **none** yet
+- **Password reset delivery** — `/auth/forgot-password` and `/auth/reset-password` are implemented server-side, but the reset token is only `console.info`-logged; no email/SMS provider is wired
+- **Server test suite for the Worker** — the existing tests build the retired Fastify app; there is no `workers-pool` Vitest setup yet
+- Real-time WebSocket/SSE (currently polling via TanStack Query)
 - In-app PDF viewer for OC documents (currently iframe/download)
-- Comprehensive test suite (auth, routes, smoke tests exist; coverage is minimal)
+- Removal of the retired Fastify/Sequelize tree and its dependencies from `packages/server`

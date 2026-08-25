@@ -1,14 +1,17 @@
 # YUENVOICE — Architecture Document
 
-> Version: 1.1
-> Last Updated: 2026-05-02
-> Reference: [PRD.md](PRD.md)
+> Version: 2.0
+> Last Updated: 2026-08-25
+> Reference: [PRD.md](PRD.md) · [deploy-cloudflare.md](deploy-cloudflare.md)
 
 ---
 
 ## 1. System Overview / 系統概覽
 
-YUENVOICE is a monorepo PWA with a clear client-server separation. The frontend is a Vite-built React SPA served as static assets; the backend is a Fastify REST API backed by PostgreSQL and Redis.
+YUENVOICE is a monorepo PWA that runs **entirely on Cloudflare**. A single Worker (Hono)
+serves both the REST API and the Vite-built React SPA (uploaded as static assets). State
+lives in Cloudflare primitives: D1 for relational data, a Durable Object for sessions and
+tokens, R2 for uploads, KV for mutable config.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -25,24 +28,44 @@ YUENVOICE is a monorepo PWA with a clear client-server separation. The frontend 
                         │ HTTPS / JSON             │ Web Push
                         ▼                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     Fastify API Server                      │
+│         Cloudflare Worker  (single deployment)              │
+│                                                             │
+│  Static assets (packages/client/dist)  ← everything not     │
+│    not_found_handling: SPA               /api/* or /uploads/*│
+│                                                             │
+│  Hono app  (run_worker_first: /api/*, /uploads/*)           │
 │  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌───────────┐  │
-│  │  Auth     │  │  RBAC     │  │  Routes  │  │  Web Push │  │
-│  │  (JWT)    │  │  Guard    │  │  Handlers│  │  Service  │  │
+│  │ requireAuth│ │requireRole│  │  Routes  │  │  Web Push │  │
+│  │ (jose JWT) │ │  (RBAC)   │  │ Handlers │  │  Service  │  │
 │  └─────┬────┘  └─────┬─────┘  └─────┬────┘  └─────┬─────┘  │
-│        └──────────────┴──────────────┘              │        │
-│                       ▼                             ▼        │
-│  ┌──────────────────────────┐    ┌────────────────────────┐  │
-│  │   Sequelize ORM Layer    │    │   Redis Client         │  │
-│  │   Models / Migrations    │    │   Cache + Pub/Sub      │  │
-│  └───────────┬──────────────┘    └───────────┬────────────┘  │
-└──────────────┼───────────────────────────────┼──────────────┘
-               ▼                               ▼
-        ┌─────────────┐                 ┌─────────────┐
-        │ PostgreSQL   │                │    Redis     │
-        │ (Primary DB) │                │  (Cache/PubSub)│
-        └─────────────┘                 └─────────────┘
+│        └──────────────┴──────────────┘              │       │
+│                       ▼                             │       │
+│              Service layer (src/http/services)      │       │
+│         ┌──────────┬──────────┬──────────┐          │       │
+└─────────┼──────────┼──────────┼──────────┼──────────┼───────┘
+          ▼          ▼          ▼          ▼          ▼
+    ┌──────────┐ ┌────────┐ ┌──────┐ ┌────────┐ ┌──────────┐
+    │  D1 (DB) │ │Durable │ │  R2  │ │KV      │ │ Web Push │
+    │  Drizzle │ │Object  │ │UPLOAD│ │CONFIG  │ │  (VAPID) │
+    │          │ │Session │ │  S   │ │admin:  │ │          │
+    │          │ │Store   │ │      │ │password│ │          │
+    └──────────┘ └────────┘ └──────┘ └────────┘ └──────────┘
 ```
+
+**Bindings** (declared in `packages/server/wrangler.jsonc`, typed in `src/env.ts`):
+
+| Binding | Resource | Purpose |
+|---------|----------|---------|
+| `DB` | D1 `yuenvoice` | All relational data (SQLite) |
+| `SESSION_STORE` | Durable Object `SessionStore` | Refresh-token hashes, push subscriptions, reset tokens |
+| `UPLOADS` | R2 `yuenvoice-uploads` | Report attachments, post images, OC documents |
+| `CONFIG` | KV | Mutable runtime config — `admin:password` |
+
+> **Legacy note.** `packages/server/` still contains the retired Fastify + Sequelize +
+> PostgreSQL + Redis implementation (`src/index.ts`, `src/app.ts`, `src/routes/`,
+> `src/services/`, `src/models/`, `src/plugins/`, `migrations/`, `seeders/`, `src/__tests__/`).
+> It is not deployed and not reachable from `src/worker.ts`. This document describes the
+> **live** Workers implementation under `src/http/` and `src/db/`.
 
 ---
 
@@ -53,11 +76,12 @@ yuenvoice/
 ├── docs/                        # Documentation
 │   ├── PRD.md
 │   ├── architecture.md
+│   ├── deploy-cloudflare.md     # Provisioning / secrets / deploy runbook
 │   ├── development-plan.md
 │   └── ui/                      # Sitemap + per-page wireframes
 ├── design-system/yuenvoice/     # MASTER.md + design tokens
 ├── .github/workflows/
-│   └── build-images.yml         # CI: build & push GHCR images
+│   └── deploy-cloudflare.yml    # CI: build SPA, migrate D1, wrangler deploy
 ├── packages/
 │   ├── client/                  # Frontend (Vite + React 19)
 │   │   ├── public/
@@ -85,63 +109,47 @@ yuenvoice/
 │   │   ├── components.json      # shadcn config
 │   │   └── vite.config.ts
 │   │
-│   └── server/                  # Backend (Fastify 5, ESM)
+│   └── server/                  # Backend (Cloudflare Worker — Hono 4, ESM)
 │       ├── src/
-│       │   ├── index.ts         # Server entry
-│       │   ├── app.ts           # Plugin & route registration (preserve order)
-│       │   ├── config/index.ts
-│       │   ├── plugins/
-│       │   │   ├── auth.ts      # @fastify/jwt + cookie + authenticate decorator
-│       │   │   ├── rbac.ts      # rbac(roles[]) preHandler factory
-│       │   │   ├── redis.ts     # ioredis client plugin
-│       │   │   └── upload.ts    # @fastify/multipart + magic-byte validation
-│       │   ├── routes/
-│       │   │   ├── auth.ts
-│       │   │   ├── reports.ts
-│       │   │   ├── discussions.ts
-│       │   │   ├── oc-documents.ts
-│       │   │   ├── notifications.ts
-│       │   │   ├── user-flats.ts        # multi-unit owner endpoints
-│       │   │   └── admin.ts
-│       │   ├── services/
-│       │   │   ├── auth.service.ts
-│       │   │   ├── report.service.ts        # incl. auto-reopen + mgmt notify
-│       │   │   ├── discussion.service.ts
-│       │   │   ├── oc-document.service.ts   # file + link-backed documents
-│       │   │   ├── notification.service.ts  # send + resend + read tracking
-│       │   │   ├── user-flat.service.ts     # multi-unit owner linking
-│       │   │   └── push.service.ts
-│       │   ├── models/          # 16 Sequelize models
-│       │   │   ├── sequelize.ts # Sequelize instance (extracted, no circular)
-│       │   │   ├── index.ts     # Associations + re-exports
-│       │   │   ├── user.ts
-│       │   │   ├── flat.ts
-│       │   │   ├── user-flat.ts             # join table for multi-unit owners
-│       │   │   ├── incident-report.ts
-│       │   │   ├── incident-attachment.ts
-│       │   │   ├── incident-comment.ts
-│       │   │   ├── discussion-board.ts
-│       │   │   ├── discussion-post.ts
-│       │   │   ├── post-image.ts
-│       │   │   ├── post-comment.ts
-│       │   │   ├── post-reaction.ts
-│       │   │   ├── oc-document.ts
-│       │   │   ├── notification.ts
-│       │   │   ├── user-notification.ts
-│       │   │   └── audit-log.ts
-│       │   ├── middleware/
-│       │   │   └── rate-limit.ts
-│       │   ├── utils/           # hash, pagination, audit, sanitize, env-validator, setup
-│       │   └── __tests__/       # auth.test.ts, routes.test.ts, integration/smoke.test.ts
-│       ├── migrations/          # 16 .cjs files, YYYYMMDDHHMMSS-name.cjs
-│       ├── seeders/
-│       ├── uploads/             # local file storage
-│       ├── .sequelizerc
+│       │   ├── worker.ts        # Worker entry — exports fetch + SessionStore DO
+│       │   ├── env.ts           # Env bindings + Hono AppBindings types
+│       │   ├── http/            # ── LIVE API implementation ──
+│       │   │   ├── app.ts       # Hono app; route mount order matters (see §4.1)
+│       │   │   ├── errors.ts    # HttpError → JSON via app.onError
+│       │   │   ├── jwt.ts       # jose sign/verify (access + refresh)
+│       │   │   ├── crypto.ts    # sha256Hex (token hashing)
+│       │   │   ├── session-store.ts  # userStore() / tokenStore() DO stubs
+│       │   │   ├── upload.ts    # magic-byte validation + R2 put
+│       │   │   ├── sanitize.ts  # xss-based HTML/text sanitizers
+│       │   │   ├── audit.ts     # logAudit()
+│       │   │   ├── middleware/
+│       │   │   │   ├── auth.ts  # requireAuth() / optionalAuth()
+│       │   │   │   └── rbac.ts  # requireRole(...roles)
+│       │   │   ├── routes/      # auth, reports, discussions, oc-documents,
+│       │   │   │                # notifications, user-flats, admin, flats, uploads
+│       │   │   └── services/    # auth, reports, discussions, oc-documents,
+│       │   │                    # notifications, push, user-flats, admin
+│       │   ├── db/
+│       │   │   ├── schema.ts    # Drizzle schema — 15 D1 tables + relations
+│       │   │   └── client.ts    # drizzle(env.DB)
+│       │   ├── durable/
+│       │   │   └── SessionStore.ts  # hset/hget/hgetall/hdel/sset/sget/del + alarm TTL sweep
+│       │   ├── utils/hash.ts    # PBKDF2-HMAC-SHA256 (WebCrypto) — live
+│       │   └── ── retired (Fastify path, not deployed) ──
+│       │       index.ts, app.ts, config/, plugins/, routes/, services/,
+│       │       models/, middleware/rate-limit.ts, utils/{setup,env-validator,
+│       │       pagination,audit,sanitize}.ts, __tests__/
+│       ├── drizzle/             # Generated D1 migrations (0000_init.sql, meta/)
+│       ├── drizzle.config.ts
+│       ├── scripts/seed.mjs     # Generates seed.sql (flats + discussion boards)
+│       ├── migrations/          # retired Sequelize migrations (18 .cjs)
+│       ├── seeders/             # retired Sequelize seeders
+│       ├── wrangler.jsonc       # Bindings, vars, assets, DO migrations
+│       ├── worker-configuration.d.ts  # Generated by `wrangler types`
+│       ├── .dev.vars.example    # Local secrets template
+│       ├── tsconfig.worker.json # Worker typecheck config
 │       └── package.json
 │
-├── Dockerfile                   # Multi-stage (server + client targets)
-├── docker-compose.yml           # Production stack
-├── docker-compose.dev.yml       # Local dev stack
 ├── package.json                 # Root workspace config
 ├── pnpm-workspace.yaml
 ├── .env.example
@@ -160,8 +168,8 @@ React Router v7 with layout-based routing. Protected routes redirect unauthentic
 /                          → Redirect to /reports (default home)
 /login                     → Login page
 /register                  → Registration (flat password flow)
-/forgot-password           → Forgot password (UI placeholder, server not yet wired)
-/reset-password            → Reset password (UI placeholder, server not yet wired)
+/forgot-password           → Forgot password (server issues a token; no email delivery yet)
+/reset-password            → Reset password (consumes the token from the DO token store)
 /reports                   → Incident reports list (residents see own, others see all)
 /reports/new               → Create new report (committee blocked)
 /reports/:id               → Report detail + status timeline
@@ -186,17 +194,27 @@ React Router v7 with layout-based routing. Protected routes redirect unauthentic
 
 | Store | Responsibility |
 |-------|---------------|
-| `useAuthStore` | Current user, in-memory access token, isAuthenticated flag |
-| `useThemeStore` | Light / dark / system theme, keyboard-shortcut toggle |
+| `useAuthStore` (`stores/auth-store.ts`) | Current user, in-memory access token, isAuthenticated flag |
+| `useNotificationStore` (`stores/notification-store.ts`) | Mirror of the notification list + derived unread count for the header badge |
 
-Server state (reports, posts, documents, notifications, flats, users) is managed via **TanStack Query** for caching, refetching, and optimistic updates. Service files (`src/services/*.ts`) export the Query hooks alongside the raw API calls. Notification unread count is read directly from the notifications query, not stored in Zustand.
+Theme is **not** a Zustand store — it lives in `components/theme-provider.tsx` (React context
++ `useTheme()`), covering light / dark / system and the `D` keyboard-shortcut toggle.
+
+Server state (reports, posts, documents, notifications, flats, users) is managed via
+**TanStack Query** for caching, refetching, and optimistic updates. Service files
+(`src/services/*.ts`) export the Query hooks alongside the raw API calls; the notification
+store is populated from the notifications query rather than fetching independently.
 
 ### 3.3 API Client
 
 A single Axios instance configured with:
-- Base URL from environment config
+- Base URL from `VITE_API_URL` (empty in the single-Worker deployment — the SPA and API are same-origin)
 - Request interceptor: attach access token from `useAuthStore`
 - Response interceptor: on 401, attempt token refresh; if refresh fails, redirect to login
+
+In local development the Vite dev server (5173) proxies `/api` and `/uploads` to
+`http://localhost:3001`. Point that proxy at `http://localhost:8787` when running the
+Worker via `wrangler dev`.
 
 ### 3.4 PWA Strategy
 
@@ -207,34 +225,46 @@ A single Axios instance configured with:
 | Uploaded images | Cache-first | Reduce bandwidth |
 | Fonts / icons | Cache-first | Rarely change |
 
-**Offline behaviour:** Read-only access to cached data. Write actions (create report, post) are queued in IndexedDB and synced when back online.
+`public/sw.js` implements cache-first, network-first, and stale-while-revalidate handlers
+plus a `push` listener for Web Push display.
+
+**Offline behaviour:** read-only access to whatever is already cached. Write actions fail
+while offline — the IndexedDB write queue with background sync described in the original
+plan is **not implemented**; `OfflineBanner` surfaces the state instead.
 
 ---
 
 ## 4. Backend Architecture / 後端架構
 
-### 4.1 Fastify Plugin Architecture
+### 4.1 Hono App Composition
 
-Fastify's plugin system is used to encapsulate cross-cutting concerns:
+`src/http/app.ts` builds the Hono app that `src/worker.ts` exports as `fetch`:
 
 ```
-Fastify Instance
-├── @fastify/cors          → CORS configuration
-├── @fastify/helmet         → Security headers
-├── @fastify/rate-limit     → Rate limiting
-├── @fastify/multipart      → File upload handling
-├── @fastify/jwt            → JWT sign/verify
-├── custom: redis.ts        → Redis client (ioredis)
-├── custom: auth.ts         → Request authentication decorator
-├── custom: rbac.ts         → Role-based preHandler
-└── Route plugins
-    ├── auth routes         → /api/auth/*
-    ├── report routes       → /api/reports/*
-    ├── discussion routes   → /api/boards/*, /api/posts/*
-    ├── oc-document routes  → /api/oc-documents/*
-    ├── notification routes → /api/notifications/*, /api/push/*
-    └── admin routes        → /api/admin/*
+Hono app
+├── secureHeaders()             → security headers (CSP left to the asset layer)
+├── CORS (conditional)          → only when CLIENT_ORIGIN is set; same-origin by default
+├── GET /api/health             → { status: 'ok', runtime: 'workers' }
+└── Route groups
+    ├── /api/auth               → auth.ts
+    ├── /api/reports            → reports.ts
+    ├── /api/oc-documents       → oc-documents.ts
+    ├── /api/notifications      → notifications.ts
+    ├── /api/push               → notifications.ts (named export `push`)
+    ├── /api/users              → user-flats.ts   (/me/flats)
+    ├── /api/admin              → admin.ts
+    ├── /api/flats              → flats.ts        (public block/floor/unit lookups)
+    ├── /api                    → discussions.ts  (/boards, /posts) — MOUNTED LAST
+    └── /uploads                → uploads.ts      (R2 object serving, outside /api)
 ```
+
+> **Mount order is load-bearing.** `discussions.ts` declares its own
+> `use('*', requireAuth())` and mounts at the bare `/api` prefix. Registered before its
+> siblings it would gate them — including the intentionally public `/api/flats/*` used by
+> the registration form. Keep it last.
+
+Unmatched requests fall through to `app.notFound` (JSON 404); thrown `HttpError`s are
+serialized by `app.onError`, anything else becomes a logged 500.
 
 ### 4.2 Request Lifecycle
 
@@ -242,51 +272,70 @@ Fastify Instance
 Incoming Request
     │
     ▼
-[ CORS / Helmet / Rate Limit ]      ← Global plugins
+[ Cloudflare edge ]  assets.run_worker_first: /api/*, /uploads/*
+    │                 everything else → static asset or index.html (SPA fallback)
+    ▼
+[ secureHeaders / conditional CORS ]
     │
     ▼
 [ Route Match ]
     │
     ▼
-[ Auth preHandler ]                  ← Verify JWT, attach user to request
+[ requireAuth() ]                    ← verify access JWT (jose), set c.var.user
     │
     ▼
-[ RBAC preHandler ]                  ← Check user.role against route policy
+[ requireRole(...) ]                 ← check c.var.user.role against the route policy
     │
     ▼
-[ Route Handler ]                    ← Call service layer
+[ zValidator(schema) ]               ← Zod body/query/param validation
     │
     ▼
-[ Service Layer ]                    ← Business logic
-    │
-    ├──→ Sequelize (PostgreSQL)      ← Data persistence
-    ├──→ Redis                       ← Caching / pub-sub
-    └──→ Web Push                    ← Push notification dispatch
+[ Route Handler ]                    ← resolve bindings from c.env, call service layer
     │
     ▼
-[ Response Serialization ]           ← JSON response
+[ Service Layer ]                    ← business logic
+    │
+    ├──→ Drizzle → D1                ← data persistence
+    ├──→ SessionStore (Durable Object)← refresh tokens, push subs, reset tokens
+    ├──→ R2                          ← upload storage
+    └──→ Web Push (VAPID)            ← fire-and-forget dispatch
+    │
+    ▼
+[ c.json(...) ]                      ← JSON response
 ```
+
+There is **no rate-limiting layer on the Worker path** — see §8.2.
 
 ### 4.3 Service Layer Pattern
 
-Route handlers delegate to service modules. Services contain all business logic and are responsible for:
+Route handlers delegate to modules in `src/http/services/`. Services contain all business
+logic and are responsible for:
 
-- Data validation beyond schema (e.g., checking flat password, target resolution)
-- Sequelize queries and transactions
-- Redis pub/sub for realtime fan-out
+- Data validation beyond schema (e.g., checking flat password, notification target resolution)
+- Drizzle queries against D1
+- Durable Object reads/writes for session and token state
 - Triggering web-push notifications (fire-and-forget — failures don't break the request)
 - Writing audit log entries
 - State-machine transitions (e.g., auto-reopen on resident follow-up)
 
+Bindings are never module-level singletons: every service takes `env` and/or a `Db` handle
+from the request context, because a Workers isolate is reused across requests and tenants.
+
 ```typescript
-// Example: routes/reports.ts — note oc_committee is excluded (review-only)
-fastify.post('/api/reports', {
-  preHandler: [fastify.authenticate, fastify.rbac(['resident', 'mgmt_staff', 'admin'])]
-}, async (request, reply) => {
-  const report = await reportService.create(request.user.id, request.body);
-  return reply.status(201).send(report);
-});
+// http/routes/reports.ts — oc_committee is absent from writerRoles (review-only)
+const reports = new Hono<AppBindings>()
+reports.use('*', requireAuth())
+
+reports.post('/', requireRole(...writerRoles), async (c) => {
+  const db = getDb(c.env.DB)
+  const report = await reportService.create(db, c.get('user')!.id, { /* ... */ })
+  return c.json(report, 201)
+})
 ```
+
+JSON endpoints use `zValidator('json' | 'query', schema)`; multipart endpoints (report
+creation, post images, OC document upload) read `await c.req.formData()` and validate
+inline, since Zod can't describe a `FormData` file part.
 
 ### 4.4 Authentication Flow
 
@@ -320,6 +369,21 @@ fastify.post('/api/reports', {
 **Token storage (client):**
 - Access token: in-memory (Zustand store) — never in localStorage
 - Refresh token: httpOnly secure cookie
+
+**Token storage (server):** refresh tokens are never persisted in plaintext. On login the
+service writes `sha256Hex(refreshToken)` into the per-user Durable Object under
+`session:refresh` keyed by session id (7-day TTL), so revoking one device leaves the user's
+other sessions alive. Refresh rotates the pair and replaces the stored hash.
+
+**Admin bootstrap.** There is no seeded admin row. `CONFIG['admin:password']` in KV is the
+source of truth: on admin login the auth service reads it, creates or updates the admin
+user in D1 to match, then authenticates. Rotating the admin password is a single
+`wrangler kv key put` — no redeploy, no migration.
+
+**Password reset.** `POST /auth/forgot-password` mints a UUID token and stores
+`reset → userId` in the per-token Durable Object with a 1-hour TTL, returning 200
+regardless of whether the email exists (no account enumeration). Delivery is **not yet
+implemented** — the token is currently only written to the Worker log.
 
 ---
 
@@ -389,64 +453,71 @@ fastify.post('/api/reports', {
 
 - `User` ↔ `Flat` is many-to-many via `UserFlat` (a resident can own multiple flats; a flat can have multiple co-owners). The legacy `User.flat_id` column remains as the **primary** flat for backward compatibility and for default `block`/`floor` resolution; additional flats are linked through `UserFlat`.
 - `User.flat_id` is **nullable** — admins create non-resident mgmt/committee/admin accounts that aren't bound to any flat.
-- All FK relationships cascade on delete except `User → IncidentReport` (a user is never hard-deleted while reports remain).
+- `User.deleted_at` marks an admin soft-delete; it is the only soft-delete column in the schema.
+- `Notification.target_user_id` supports `target_type = 'user'` (individual reminders) alongside `all` / `block` / `floor`.
+- Child rows cascade on delete (attachments, comments, images, reactions, user_notifications); rows that reference `users` do not, so a user is never hard-deleted while their content remains.
 
-### 5.2 Sequelize Configuration
+### 5.2 D1 + Drizzle Configuration
 
-Migrations are CommonJS (`.cjs`) and named `YYYYMMDDHHMMSS-description.cjs`. Umzug auto-runs pending migrations on server startup, so there is no manual `db:migrate` step in dev. Once a migration has been merged to `main`, never edit it — write a new one.
+The schema is a single TypeScript file, `src/db/schema.ts` — **15 tables** plus Drizzle
+`relations()`. SQL migrations are generated from it, never hand-written:
+
+```bash
+# 1. edit src/db/schema.ts
+pnpm --filter server d1:generate          # emits drizzle/NNNN_*.sql + meta/
+pnpm --filter server d1:migrate:local     # apply to the local D1 simulation
+pnpm --filter server d1:migrate:remote    # apply to production (CI does this pre-deploy)
+```
 
 ```
 packages/server/
-├── .sequelizerc                                    # Points to compiled paths
-├── migrations/                                     # 16 files, chronological
-│   ├── 20260328000001-create-flats.cjs
-│   ├── 20260328000002-create-users.cjs
-│   ├── 20260328000003-create-incident-reports.cjs
-│   ├── 20260328000004-create-incident-attachments.cjs
-│   ├── 20260328000005-create-incident-comments.cjs
-│   ├── 20260328000006-create-discussion-boards.cjs
-│   ├── 20260328000007-create-discussion-posts.cjs
-│   ├── 20260328000008-create-post-images.cjs
-│   ├── 20260328000009-create-post-comments.cjs
-│   ├── 20260328000010-create-post-reactions.cjs
-│   ├── 20260328000011-create-oc-documents.cjs
-│   ├── 20260328000012-create-notifications.cjs
-│   ├── 20260328000013-create-user-notifications.cjs
-│   ├── 20260328000014-create-audit-logs.cjs
-│   ├── 20260422210000-add-oc-document-links.cjs    # external_url + link_type
-│   └── 20260422220000-create-user-flats.cjs        # multi-unit owner join
-└── seeders/
-    ├── seed-flats.cjs                              # Estate flats + reg passwords
-    ├── seed-admin-user.cjs                         # Default admin
-    └── seed-discussion-boards.cjs                  # Estate + per-block + per-floor
+├── drizzle.config.ts
+├── drizzle/
+│   ├── 0000_init.sql        # full baseline schema (the Sequelize history is not replayed)
+│   └── meta/                # drizzle-kit journal + snapshots
+└── scripts/
+    ├── seed.mjs             # generates seed.sql — estate flats + discussion boards
+    └── seed.sql             # generated; applied via `wrangler d1 execute`
 ```
+
+Migrations do **not** run automatically on Worker start (there is no boot hook in a Worker);
+applying them is an explicit step in the deploy workflow. Once a generated migration has been
+applied anywhere, treat it as immutable — change `schema.ts` and generate a new one.
 
 **Key conventions:**
 
-- All primary keys are UUID v4 (`DataTypes.UUID`, `defaultValue: UUIDV4`)
-- `underscored: true` on every model — TypeScript camelCase ↔ DB snake_case
-- Timestamps via `created_at` / `updated_at`; `IncidentComment` is the lone exception (no `updated_at`)
-- Soft delete not used — audit log tracks destructive actions instead
-- Indexes on FKs and commonly filtered columns (status, type, board_id, target_block, target_floor)
-- Sequelize instance is in `src/models/sequelize.ts` (extracted to break circular imports between models/index.ts and individual model files)
+- Primary keys are UUID v4 generated app-side (`crypto.randomUUID()` via the `uuidPk()` helper) — SQLite has no UUID type
+- Timestamps are ISO-8601 **text**, set by `$defaultFn` / `$onUpdateFn`; `IncidentComment` is the lone table with no `updated_at`
+- Column names stay snake_case (matching the old `underscored: true` output) so the client's response shape is unchanged
+- Booleans are `integer({ mode: 'boolean' })`; `audit_logs.metadata` is `text({ mode: 'json' })`
+- Enums are `text({ enum: [...] })` — enforced by Drizzle's types, not by the database
+- Only `users.deleted_at` soft-deletes (admin user removal); everything else is a hard delete, with the audit log as the record
+- Indexes on FKs and commonly filtered columns (status, type, board_id, user_id, target_block, target_floor)
 
-### 5.3 Redis Usage
+**Seeded data:** flats (with registration passwords) and discussion boards. The admin
+account is deliberately *not* seeded — it bootstraps from KV on first admin login.
 
-| Key Pattern | Type | TTL | Purpose |
-|-------------|------|-----|---------|
-| `session:refresh:<userId>` | Hash (`{sid: tokenHash}`) | 7d | Per-session refresh token hashes — invalidating one session won't kill the user's other devices |
-| `push:sub:<userId>` | Hash (`{endpoint: subscriptionJson}`) | none | Web Push subscriptions (one user can have many devices) |
-| `ratelimit:<route>:<ip>` | String | 1m | `@fastify/rate-limit` counter |
+### 5.3 Durable Object State (SessionStore)
 
-> Caching of report lists / unread counts / user profiles is **not** implemented — all reads go straight to PostgreSQL via Sequelize. TanStack Query handles the client-side cache. Add Redis caching only if a measured hot path requires it.
+`SessionStore` replaces Redis. It exposes a tiny Redis-shaped RPC surface — `hset` / `hget` /
+`hgetall` / `hdel` for hash-like keys, `sset` / `sget` / `del` for scalars — with per-entry
+TTLs swept by the DO `alarm()` handler.
 
-**Pub/Sub channels:**
+Stubs are resolved by entity so that related writes land on one object and stay strongly
+consistent (`src/http/session-store.ts`):
 
-| Channel | Publisher | Subscriber | Event |
-|---------|-----------|------------|-------|
-| `push:queue` | Notification service | Push worker (in-process) | Web Push dispatch fan-out |
+| Helper | DO id | Keys held | TTL |
+|--------|-------|-----------|-----|
+| `userStore(env, userId)` | `u:<userId>` | `session` → `{sessionId: sha256(refreshToken)}` | 7d per field |
+| `userStore(env, userId)` | `u:<userId>` | `push` → `{endpointHash: subscriptionJson}` | none |
+| `tokenStore(env, token)` | `t:<token>` | `reset` → `userId` | 1h |
 
-> Real-time SSE/WebSocket transport is not yet wired — clients poll via TanStack Query for now.
+Sharding per user is what makes refresh-token rotation race-free: every rotation for a given
+user serializes through that user's single Durable Object.
+
+> No server-side caching of report lists / unread counts / profiles exists — all reads go
+> straight to D1. TanStack Query is the cache. Real-time SSE/WebSocket transport is not
+> wired; clients poll.
 
 ---
 
@@ -463,34 +534,47 @@ packages/server/
                                               │ Notification     │
                                               │ Service          │
                                               │                  │
-                                              │ 1. Save to DB    │
+                                              │ 1. Save to D1    │
                                               │ 2. Resolve target│
                                               │    users         │
                                               │ 3. Create User   │
                                               │    Notifications │
-                                              │ 4. Publish Redis │
-                                              │ 5. Send Web Push │
+                                              │ 4. Send Web Push │
+                                              │    (fire & forget)│
                                               └────────┬─────────┘
                                                        │
-                                          ┌────────────┼────────────┐
-                                          ▼            ▼            ▼
-                                   ┌───────────┐ ┌─────────┐ ┌──────────┐
-                                   │PostgreSQL │ │  Redis   │ │ Web Push │
-                                   │(persist)  │ │(pub/sub) │ │ (VAPID)  │
-                                   └───────────┘ └─────────┘ └──────────┘
-                                                       │            │
-                                                       ▼            ▼
-                                                 ┌──────────┐ ┌──────────┐
-                                                 │ In-app   │ │ Browser  │
-                                                 │ realtime │ │ push     │
-                                                 │ update   │ │ popup    │
-                                                 └──────────┘ └──────────┘
+                                          ┌────────────┴────────────┐
+                                          ▼                         ▼
+                                   ┌───────────┐            ┌──────────────┐
+                                   │ D1        │            │ SessionStore │
+                                   │(persist)  │            │  push subs   │
+                                   └─────┬─────┘            └──────┬───────┘
+                                         │                         ▼
+                                         │                  ┌──────────────┐
+                                         │                  │ Web Push     │
+                                         ▼                  │ (VAPID)      │
+                                   ┌──────────┐             └──────┬───────┘
+                                   │ In-app   │                    ▼
+                                   │ center   │             ┌──────────┐
+                                   │ (polled) │             │ Browser  │
+                                   └──────────┘             │ push     │
+                                                            └──────────┘
 ```
 
 **Target resolution logic:**
-1. `target_type = all` → query all active users
-2. `target_type = block` → query users whose flat.block matches `target_block`
-3. `target_type = floor` → query users whose flat.block + flat.floor matches
+1. `target_type = all` → all active users
+2. `target_type = block` → users whose flat.block matches `target_block`
+3. `target_type = floor` → users whose flat.block + flat.floor match
+4. `target_type = user` → the single user in `target_user_id` (individual reminders)
+
+Each resolved user gets a `user_notifications` row carrying read state, then push fan-out
+runs per device via `sendToUsers()`. Push is best-effort: a dead subscription is pruned from
+the Durable Object, and every failure is swallowed so the originating request still succeeds.
+If VAPID keys are unset, push endpoints return 503 and the in-app center still works.
+
+**Auto-triggered fan-outs** (not user-composed): report status changes, auto-reopen on a
+resident follow-up comment (→ mgmt/admin), and reopen escalation on the 3rd+ reopen
+(→ oc_committee).
 
 ---
 
@@ -500,28 +584,33 @@ packages/server/
 Client (multipart/form-data)
     │
     ▼
-@fastify/multipart
+c.req.formData()  → File entries → .arrayBuffer()
     │
     ▼
-Upload Plugin (validates type, size)
+http/upload.ts :: saveFile(env, bytes, entity)
     │
-    ├── Max file size: 10MB per file
-    ├── Allowed types: JPEG, PNG, WebP, PDF, DOC/DOCX
-    └── Max files per request: 5
-    │
-    ▼
-Storage Adapter (strategy pattern)
-    │
-    ├── Local: ./uploads/{entity}/{yyyy-mm}/{uuid}.{ext}
-    └── S3: s3://{bucket}/{entity}/{yyyy-mm}/{uuid}.{ext}
+    ├── Size check: UPLOAD_MAX_SIZE (default 10MB per file)
+    ├── Magic-byte sniff → JPEG / PNG / WebP / PDF only
+    │     (the client-declared MIME type is ignored entirely)
+    └── Reject on mismatch → HttpError 400
     │
     ▼
-Return file metadata (path, type, size) → saved to DB
+env.UPLOADS.put(key, bytes, { httpMetadata: { contentType } })   ← R2
+    │
+    ▼
+Return { filePath, fileType, fileSize } → stored on the D1 row
 ```
 
-**File path convention:** `{entity}/{yyyy-mm}/{uuid}.{ext}`
+**Object key convention:** `{entity}/{yyyy-mm}/{uuid}.{ext}`
 - `entity`: `reports`, `posts`, `oc-documents`
-- Files are served via a static route `/uploads/*` (local) or pre-signed URLs (S3)
+- Served by `GET /uploads/*` (`http/routes/uploads.ts`), which streams the R2 body with the
+  stored content type, the R2 etag, and `Cache-Control: public, max-age=31536000, immutable`
+
+> **Security note.** `/uploads/*` is **unauthenticated**. Access control rests entirely on
+> the key being an unguessable UUID — an upload URL is a capability. Anyone holding the URL
+> can read the object, including after the owning report or post is deleted (R2 objects are
+> not garbage-collected). Add an auth check plus a signed-URL scheme before treating uploads
+> as confidential.
 
 ---
 
@@ -531,29 +620,38 @@ Return file metadata (path, type, size) → saved to DB
 
 | Layer | Mechanism |
 |-------|-----------|
-| Transport | HTTPS (TLS 1.3) |
-| Authentication | JWT (access 15min + refresh 7d httpOnly cookie) |
-| Authorization | RBAC preHandler per route |
-| Password hashing | Argon2id (OWASP recommended: memoryCost 19 MiB, timeCost 2, parallelism 1) |
-| Flat registration password | Argon2id hashed, compared on registration |
+| Transport | HTTPS (terminated by Cloudflare) |
+| Security headers | Hono `secureHeaders()` on every route |
+| Authentication | JWT via `jose` (access 15min + refresh 7d httpOnly cookie) |
+| Authorization | `requireAuth()` + `requireRole(...)` middleware per route/group |
+| Password hashing | WebCrypto PBKDF2-HMAC-SHA256, 100,000 iterations, 256-bit key, per-password random salt |
+| Flat registration password | Same PBKDF2 scheme, compared on registration |
+| Refresh / reset tokens at rest | SHA-256 only — plaintext is never stored |
+
+Hash format is PHC-like: `pbkdf2-sha256$<iterations>$<saltB64>$<hashB64>`. The iteration
+count travels with each hash, so raising it later is backward-compatible.
+
+> **Why not Argon2id.** Argon2 on Workers requires a pre-compiled wasm import
+> (`hash-wasm`'s inline `WebAssembly.compile` is blocked by the runtime). PBKDF2 was chosen
+> because there were no legacy hashes to preserve — D1 started empty. **100,000 is a hard
+> ceiling**: the production Workers runtime throws `NotSupportedError` above it, and
+> `wrangler dev` does *not* enforce this, so the failure only appears after deploy.
 
 ### 8.2 Rate Limiting
 
-| Route Group | Limit | Window |
-|-------------|-------|--------|
-| `POST /api/auth/*` | 10 requests | 1 minute |
-| `POST /api/reports` | 20 requests | 1 minute |
-| `POST /api/boards/*/posts` | 10 requests | 1 minute |
-| `POST /api/notifications` | 5 requests | 1 minute |
-| `POST /api/notifications/:id/resend` | 10 requests | 1 minute |
-| All other routes | 100 requests | 1 minute |
+**Not implemented on the Worker.** The retired Fastify stack enforced per-route limits
+(auth 10/min, reports 20/min, posts 10/min, notifications 5/min, default 100/min); that layer
+was not ported. Until it is, brute-force protection on `POST /api/auth/login` relies on
+Cloudflare-level controls only. Restoring it means either a WAF rate-limiting rule in the
+Cloudflare dashboard or a counter in a Durable Object / KV keyed by IP.
 
 ### 8.3 Input Validation
 
-- **Fastify JSON Schema** validation on all route inputs (body, params, query)
-- **DOMPurify** for sanitizing user-generated HTML/text before storage
-- **Parameterized queries** via Sequelize — no raw SQL concatenation
-- **File type validation** via magic bytes, not just extension
+- **Zod** schemas via `@hono/zod-validator` on JSON bodies and query strings; multipart routes validate inline
+- **`xss`** (`http/sanitize.ts`) sanitizes user-generated HTML/text before storage
+- **Parameterized queries** via Drizzle — no raw SQL concatenation
+- **File type validation** via magic bytes, not extension or declared MIME type
+- **Account enumeration** guarded on `POST /auth/forgot-password` (always 200)
 
 ### 8.4 Audit Logging
 
@@ -577,86 +675,84 @@ All state-changing operations by management/admin roles are logged:
 
 ## 9. Deployment Architecture / 部署架構
 
+> Full runbook: [deploy-cloudflare.md](deploy-cloudflare.md).
+
 ### 9.1 Development
 
-```
-pnpm dev           # Runs both client (Vite dev server, port 5173)
-                   # and server (tsx watch, port 3001) concurrently
-                   # Vite proxies /api → Fastify
-                   # Migrations auto-run on server startup via Umzug
+```bash
+pnpm --filter server d1:migrate:local   # apply migrations to the local D1 simulation
+pnpm --filter server seed:local         # flats + discussion boards
+pnpm --filter server cf:dev             # wrangler dev → http://localhost:8787
+pnpm --filter client dev                # Vite dev server → http://localhost:5173
 ```
 
-`docker-compose.dev.yml` ships a Postgres + Redis pair for local dev so devs don't need to install them on the host.
+Local secrets live in `packages/server/.dev.vars` (gitignored; template in
+`.dev.vars.example`). Set a local admin password with
+`wrangler kv key put --binding=CONFIG "admin:password" "admin123" --local`.
+
+Two caveats:
+
+- `vite.config.ts` still proxies `/api` and `/uploads` to `http://localhost:3001` (the
+  retired Fastify port). Point it at `8787` — or hit the Worker directly — when doing
+  full-stack local work.
+- `pnpm dev` at the repo root starts the **retired** Fastify server and expects Postgres +
+  Redis. It is not the Cloudflare dev loop.
 
 ### 9.2 Production — CI / CD
 
-`.github/workflows/build-images.yml` builds and pushes two container images on every push to `main` and on `v*` tags:
+`.github/workflows/deploy-cloudflare.yml` runs on push to `main` (server / client / lockfile
+changes) or via `gh workflow run`. It:
 
-- `ghcr.io/maxch3306/yuenvoice-server:<tag>`
-- `ghcr.io/maxch3306/yuenvoice-client:<tag>`
+1. builds the SPA (`packages/client/dist` — uploaded as the Worker's static assets)
+2. regenerates binding types (`wrangler types`)
+3. typechecks the Worker (`tsconfig.worker.json`)
+4. applies pending D1 migrations (`wrangler d1 migrations apply --remote`)
+5. `wrangler deploy`
 
-Tags include the branch name, the short SHA, semver from `v*` tags, and `latest` (default branch only). Images are built from a single multi-stage `Dockerfile` with `target=server` and `target=client`. PRs build but don't push.
-
-`docker-compose.yml` runs the production stack: nginx (reverse proxy + static client) → fastify (server image) → postgres + redis.
+Repo secrets required: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (Account-level edit
+permissions for Workers Scripts, D1, Workers KV, Workers R2). The workflow never touches
+runtime secrets.
 
 ```
-┌──────────────┐     ┌──────────────────────────────────┐
-│   Nginx      │     │   yuenvoice-server (Fastify)     │
-│   (Reverse   │────→│   ├── /api routes                │
-│    Proxy)    │     │   └── /uploads/* static files    │
-│              │     └────────────┬───────────┬─────────┘
-│  ├── SSL     │                  │           │
-│  ├── gzip    │     ┌──────────────────────────────────┐
-│  └── static  │────→│   yuenvoice-client (nginx+dist)  │
-│    client    │     └──────────────────────────────────┘
-└──────────────┘                  │           │
-                                  ▼           ▼
-                           ┌──────────┐ ┌──────────┐
-                           │PostgreSQL│ │  Redis   │
-                           └──────────┘ └──────────┘
+        ┌────────────────── Cloudflare edge ──────────────────┐
+        │                                                     │
+Request ┤  /api/*, /uploads/*  ──→  Worker (Hono)  ──→ D1 / DO / R2 / KV
+        │                                                     │
+        │  everything else     ──→  Static assets → index.html (SPA)
+        └─────────────────────────────────────────────────────┘
 ```
 
-### 9.3 Environment Variables
+### 9.3 Configuration
 
-The server fails fast on startup if any required variable is missing (`utils/env-validator.ts`). Defaults shown below are applied when the variable is unset — review every secret before deploying to production.
+Worker configuration lives in `packages/server/wrangler.jsonc`, not in a `.env` file.
 
-```env
-# Server
-NODE_ENV=production
-PORT=3001
-API_PREFIX=/api
+**Public vars** (`vars` block — safe to commit):
 
-# Database (required)
-DATABASE_URL=postgresql://user:pass@localhost:5432/yuenvoice
-
-# Redis (required)
-REDIS_URL=redis://localhost:6379
-
-# JWT (override in production!)
-JWT_ACCESS_SECRET=dev-access-secret-change-in-production
-JWT_REFRESH_SECRET=dev-refresh-secret-change-in-production
-
-# Web Push (VAPID — generate with `npx web-push generate-vapid-keys`)
-VAPID_PUBLIC_KEY=
-VAPID_PRIVATE_KEY=
-VAPID_SUBJECT=mailto:admin@yuenvoice.app
-
-# File Upload
-UPLOAD_PROVIDER=local           # "local" or "s3"
-UPLOAD_DIR=./uploads
-UPLOAD_MAX_SIZE=10485760        # 10MB
-
-# S3 (only when UPLOAD_PROVIDER=s3 — not yet implemented)
-S3_BUCKET=
-S3_REGION=
-S3_ACCESS_KEY=
-S3_SECRET_KEY=
-
-# Default admin (created on first boot if no admin exists)
-ADMIN_EMAIL=admin@yuenvoice.app
-ADMIN_PASSWORD=admin123          # change immediately after first login
-ADMIN_NAME=System Admin
+```jsonc
+"NODE_ENV": "production",
+"API_PREFIX": "/api",
+"VAPID_SUBJECT": "mailto:admin@email.yuenvoice.app",
+"VAPID_PUBLIC_KEY": "<public half of the VAPID keypair>",
+"UPLOAD_MAX_SIZE": "10485760",   // 10MB
+"ADMIN_EMAIL": "admin@yuenvoice.app",
+"ADMIN_NAME": "System Admin"
 ```
+
+`CLIENT_ORIGIN` is optional — set it only when the SPA is served from a different origin,
+which switches CORS on.
+
+**Secrets** (`wrangler secret put`, or `.dev.vars` locally):
+
+| Name | Purpose |
+|------|---------|
+| `JWT_ACCESS_SECRET` | Signs 15-minute access tokens |
+| `JWT_REFRESH_SECRET` | Signs 7-day refresh tokens |
+| `VAPID_PRIVATE_KEY` | Web Push signing (omit to disable push — endpoints return 503) |
+
+**KV config** (`CONFIG` namespace) — `admin:password`, stored in plaintext and treated as a
+secret. It is the source of truth for the admin login; rotate with
+`wrangler kv key put --binding=CONFIG "admin:password" "<new>" --remote`, effective on the
+next admin login. The root `.env` / `.env.example` files serve the retired Node stack only.
 
 ---
 
@@ -665,9 +761,9 @@ ADMIN_NAME=System Admin
 | Tool | Purpose |
 |------|---------|
 | **pnpm** | Package manager with workspace support |
-| **TypeScript** | Type safety across client and server |
-| **ESLint** | Code linting (shared config) |
+| **TypeScript** | Type safety across client and server (Worker uses `tsconfig.worker.json`) |
+| **Wrangler** | Worker dev server, D1 migrations, secrets, deploy |
+| **Drizzle Kit** | Schema-first D1 migration generation |
+| **ESLint** | Code linting |
 | **Prettier** | Code formatting |
-| **Vitest** | Unit testing (client + server) |
-| **Supertest** | API integration testing |
-| **Husky + lint-staged** | Pre-commit hooks |
+| **Vitest** | Unit testing (client; server suite still targets the retired Fastify app) |

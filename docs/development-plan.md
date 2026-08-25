@@ -1,10 +1,17 @@
 # YUENVOICE — Development Plan
 
-> Version: 1.1
-> Last Updated: 2026-05-02
-> Reference: [PRD.md](PRD.md) | [architecture.md](architecture.md)
+> Version: 2.0
+> Last Updated: 2026-08-25
+> Reference: [PRD.md](PRD.md) | [architecture.md](architecture.md) | [deploy-cloudflare.md](deploy-cloudflare.md)
 >
-> **Status:** Waves 0–5 are complete. The codebase has since received post-launch iterations — see [Wave 6 — Post-Launch Iterations](#wave-6--post-launch-iterations--上線後迭代) at the bottom of this document. The wave-based plan below is preserved as the original delivery record; do not rely on it as a snapshot of current code (consult [architecture.md](architecture.md) and [PRD.md](PRD.md) for current state).
+> **Status:** Waves 0–5 are complete, followed by post-launch iterations (Wave 6) and a full
+> re-platform of the backend onto Cloudflare Workers (Wave 7) — both at the bottom of this
+> document.
+>
+> **Read Waves 0–6 as a historical delivery record, not as current code.** They describe the
+> Fastify + PostgreSQL + Sequelize + Redis implementation that Wave 7 replaced; those files
+> still exist in `packages/server/` but are no longer deployed. For current state consult
+> [architecture.md](architecture.md) and [Wave 7](#wave-7--cloudflare-cutover--遷移至-cloudflare).
 
 ---
 
@@ -577,18 +584,57 @@ Wave 2D    Wave 2E    Wave 2F    Wave 2G     Wave 3H  Wave 3I  Wave 3J  Wave 3K
 | Routes | `POST /api/admin/flats`, `PATCH /api/admin/flats/:id`, `DELETE /api/admin/flats/:id`, `GET /api/admin/flats/blocks`, `GET /api/admin/flats/export-csv` |
 | Client | `FlatManagementPage` extended with create/edit/delete dialogs, CSV export, block filter |
 
-### 6.8 CI container build
+### 6.8 CI container build (superseded by Wave 7)
 
 | Item | Detail |
 |------|--------|
-| Workflow | `.github/workflows/build-images.yml` builds and pushes server + client images to `ghcr.io/maxch3306/yuenvoice-{server,client}` on push to `main` and on `v*` tags |
-| Dockerfile | Multi-stage with `target=server` and `target=client`; built via Buildx with GHA cache |
+| Workflow | `.github/workflows/build-images.yml` built and pushed server + client images to `ghcr.io/maxch3306/yuenvoice-{server,client}` |
+| Status | **Retired** in `4655c15` — replaced by `deploy-cloudflare.yml` |
 | Commit | `7ad9e69` |
+
+---
+
+## Wave 7 — Cloudflare Cutover / 遷移至 Cloudflare
+
+The backend was re-platformed from Node/Fastify onto Cloudflare Workers. The product
+surface, API paths, and response shapes are unchanged; the runtime and every storage
+primitive are not.
+
+| Concern | Before | After | Where |
+|---------|--------|-------|-------|
+| HTTP framework | Fastify 5 + plugins | Hono 4 | `src/http/app.ts`, `src/worker.ts` |
+| Database | PostgreSQL + Sequelize | D1 (SQLite) + Drizzle | `src/db/schema.ts`, `drizzle/` |
+| Migrations | Umzug auto-run on boot | `wrangler d1 migrations apply` (explicit, CI step) | `drizzle/0000_init.sql` |
+| Sessions / tokens / push subs | Redis (ioredis) | Durable Object `SessionStore` | `src/durable/SessionStore.ts`, `src/http/session-store.ts` |
+| Uploads | Local disk + `@fastify/static` | R2 bucket + `/uploads/*` route | `src/http/upload.ts`, `src/http/routes/uploads.ts` |
+| JWT | `@fastify/jwt` | `jose` | `src/http/jwt.ts` |
+| Password hashing | Argon2id | PBKDF2-HMAC-SHA256, 100k iterations | `src/utils/hash.ts` |
+| Validation | Fastify JSON Schema | Zod + `@hono/zod-validator` | `src/http/routes/*` |
+| Sanitization | DOMPurify + jsdom | `xss` | `src/http/sanitize.ts` |
+| Admin bootstrap | `ADMIN_PASSWORD` env + seeder | KV `admin:password`, reconciled on admin login | `src/http/services/auth.ts` |
+| SPA hosting | nginx container | Worker static assets (`run_worker_first`) | `wrangler.jsonc` |
+| Deploy | Docker → GHCR → compose | `.github/workflows/deploy-cloudflare.yml` | — |
+
+Key commits: `8886dd1` (foundation), `06b089a` (Worker skeleton + DO), `1140ada` (edge-native
+auth), `9c3d975` (reports domain), `adb83c2` (all remaining domains), `59fcbd4` (D1 seed),
+`c7ae12f` (KV admin password), `4655c15` (retire Docker stack), `6303613` (PBKDF2 iteration cap).
+
+**Deliberately not ported:** the per-route rate limiter (`middleware/rate-limit.ts`) and the
+Redis pub/sub fan-out (push is called directly, fire-and-forget).
+
+**Left in the tree, not deployed:** `src/index.ts`, `src/app.ts`, `src/routes/`,
+`src/services/`, `src/models/`, `src/plugins/`, `src/config/`, `migrations/`, `seeders/`,
+`src/__tests__/`, plus the Fastify/Sequelize/pg/ioredis/argon2 dependencies in
+`packages/server/package.json`. Removing them is outstanding work.
 
 ### Outstanding follow-ups
 
-- `/auth/forgot-password` and `/auth/reset-password` server endpoints (UI placeholders exist)
-- S3 storage adapter (only `local` is implemented despite `UPLOAD_PROVIDER` being parameterised)
-- Real-time SSE/WebSocket transport (clients poll TanStack Query; Redis pub/sub is wired only for in-process push fan-out)
+- **Rate limiting on the Worker** — the Fastify limits were not ported; auth endpoints are currently unthrottled at the application layer
+- **Password reset delivery** — `/auth/forgot-password` and `/auth/reset-password` work end-to-end server-side, but the token is only written to the Worker log; no email/SMS provider
+- **Worker test suite** — `src/__tests__/` still builds the retired Fastify app and needs Postgres/Redis; no `@cloudflare/vitest-pool-workers` setup exists
+- **Delete the retired Fastify/Sequelize tree** and drop its dependencies
+- **Vite dev proxy** still points at `localhost:3001`; `wrangler dev` serves `8787`
+- **Upload authorization** — `/uploads/*` is public; object keys are the only access control
+- **R2 orphan cleanup** — deleting a report/post does not delete its R2 objects
+- Real-time SSE/WebSocket transport (clients poll TanStack Query)
 - In-app PDF viewer (currently iframe / browser-native preview)
-- Test coverage (auth, routes, smoke tests exist; broad coverage missing)
